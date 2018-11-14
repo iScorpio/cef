@@ -277,6 +277,10 @@ if (is_win) {
 static_library("libcef_static") {
   sources = gypi_paths2.includes_common +
             gypi_paths.autogen_cpp_includes + [
+    "libcef/browser/audio_mirror_destination.cc",
+    "libcef/browser/audio_mirror_destination.h",
+    "libcef/browser/audio_output_stream.cc",
+    "libcef/browser/audio_output_stream.h",
     "libcef/browser/browser_context.cc",
     "libcef/browser/browser_context.h",
     "libcef/browser/browser_context_impl.cc",
