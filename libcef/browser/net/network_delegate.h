@@ -30,23 +30,26 @@ class CefNetworkDelegate : public net::NetworkDelegateImpl {
       net::URLRequest* request,
       std::unique_ptr<net::SourceStream> upstream) override;
   int OnBeforeURLRequest(net::URLRequest* request,
-                         const net::CompletionCallback& callback,
+                         net::CompletionOnceCallback callback,
                          GURL* new_url) override;
   AuthRequiredResponse OnAuthRequired(
       net::URLRequest* request,
       const net::AuthChallengeInfo& auth_info,
-      const AuthCallback& callback,
+      AuthCallback callback,
       net::AuthCredentials* credentials) override;
-  void OnCompleted(net::URLRequest* request, bool started) override;
+  void OnCompleted(net::URLRequest* request,
+                   bool started,
+                   int net_error) override;
   bool OnCanGetCookies(const net::URLRequest& request,
-                       const net::CookieList& cookie_list) override;
+                       const net::CookieList& cookie_list,
+                       bool allowed_from_caller) override;
   bool OnCanSetCookie(const net::URLRequest& request,
                       const net::CanonicalCookie& cookie,
-                      net::CookieOptions* options) override;
+                      net::CookieOptions* options,
+                      bool allowed_from_caller) override;
   bool OnCanAccessFile(const net::URLRequest& request,
                        const base::FilePath& original_path,
                        const base::FilePath& absolute_path) const override;
-  bool OnAreExperimentalCookieFeaturesEnabled() const override;
 
   // Weak, owned by our owner (CefURLRequestContextGetterImpl).
   BooleanPrefMember* force_google_safesearch_;

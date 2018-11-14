@@ -3,15 +3,16 @@
 // found in the LICENSE file.
 
 // APIs must also be registered in
-// libcef/common/extensions/api/_*_features.json files. See
+// libcef/common/extensions/api/_*_features.json files and possibly
+// CefExtensionsDispatcherDelegate::PopulateSourceMap. See
 // libcef/common/extensions/api/README.txt for additional details.
 
 #include "libcef/browser/extensions/chrome_api_registration.h"
 
 #include "libcef/browser/extensions/api/tabs/tabs_api.h"
 
+#include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 #include "chrome/browser/extensions/api/resources_private/resources_private_api.h"
-#include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
 #include "extensions/browser/api/alarms/alarms_api.h"
 #include "extensions/browser/api/storage/storage_api.h"
 #include "extensions/browser/extension_function_registry.h"
@@ -29,14 +30,18 @@ namespace cefimpl = extensions::cef;
 const char* const kSupportedAPIs[] = {
     "resourcesPrivate",
     EXTENSION_FUNCTION_NAME(ResourcesPrivateGetStringsFunction),
-    "streamsPrivate",
-    EXTENSION_FUNCTION_NAME(StreamsPrivateAbortFunction),
     "alarms",
     EXTENSION_FUNCTION_NAME(AlarmsCreateFunction),
     EXTENSION_FUNCTION_NAME(AlarmsGetFunction),
     EXTENSION_FUNCTION_NAME(AlarmsGetAllFunction),
     EXTENSION_FUNCTION_NAME(AlarmsClearFunction),
     EXTENSION_FUNCTION_NAME(AlarmsClearAllFunction),
+    "contentSettings",
+    EXTENSION_FUNCTION_NAME(ContentSettingsContentSettingClearFunction),
+    EXTENSION_FUNCTION_NAME(ContentSettingsContentSettingGetFunction),
+    EXTENSION_FUNCTION_NAME(ContentSettingsContentSettingSetFunction),
+    EXTENSION_FUNCTION_NAME(
+        ContentSettingsContentSettingGetResourceIdentifiersFunction),
     "storage",
     EXTENSION_FUNCTION_NAME(StorageStorageAreaGetFunction),
     EXTENSION_FUNCTION_NAME(StorageStorageAreaSetFunction),
@@ -69,12 +74,16 @@ bool ChromeFunctionRegistry::IsSupported(const std::string& name) {
 // static
 void ChromeFunctionRegistry::RegisterAll(ExtensionFunctionRegistry* registry) {
   registry->RegisterFunction<ResourcesPrivateGetStringsFunction>();
-  registry->RegisterFunction<StreamsPrivateAbortFunction>();
   registry->RegisterFunction<AlarmsCreateFunction>();
   registry->RegisterFunction<AlarmsGetFunction>();
   registry->RegisterFunction<AlarmsGetAllFunction>();
   registry->RegisterFunction<AlarmsClearFunction>();
   registry->RegisterFunction<AlarmsClearAllFunction>();
+  registry->RegisterFunction<ContentSettingsContentSettingClearFunction>();
+  registry->RegisterFunction<ContentSettingsContentSettingGetFunction>();
+  registry->RegisterFunction<ContentSettingsContentSettingSetFunction>();
+  registry->RegisterFunction<
+      ContentSettingsContentSettingGetResourceIdentifiersFunction>();
   registry->RegisterFunction<StorageStorageAreaGetFunction>();
   registry->RegisterFunction<StorageStorageAreaSetFunction>();
   registry->RegisterFunction<StorageStorageAreaRemoveFunction>();

@@ -7,6 +7,7 @@
 
 #include "libcef/common/cef_messages.h"
 #include "libcef/common/net/net_resource_provider.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/content_renderer_client.h"
 
 #include "components/visitedlink/renderer/visitedlink_slave.h"
@@ -16,9 +17,9 @@
 #include "content/public/renderer/render_thread.h"
 #include "net/base/net_module.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_security_policy.h"
 
 bool CefRenderThreadObserver::is_incognito_process_ = false;
 
@@ -64,18 +65,16 @@ void CefRenderThreadObserver::OnModifyCrossOriginWhitelistEntry(
     const Cef_CrossOriginWhiteListEntry_Params& params) {
   GURL gurl = GURL(params.source_origin);
   if (add) {
-    blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+    blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
         gurl, blink::WebString::FromUTF8(params.target_protocol),
         blink::WebString::FromUTF8(params.target_domain),
-        params.allow_target_subdomains);
+        params.allow_target_subdomains,
+        network::mojom::CORSOriginAccessMatchPriority::kDefaultPriority);
   } else {
-    blink::WebSecurityPolicy::RemoveOriginAccessWhitelistEntry(
-        gurl, blink::WebString::FromUTF8(params.target_protocol),
-        blink::WebString::FromUTF8(params.target_domain),
-        params.allow_target_subdomains);
+    blink::WebSecurityPolicy::ClearOriginAccessAllowListForOrigin(gurl);
   }
 }
 
 void CefRenderThreadObserver::OnClearCrossOriginWhitelist() {
-  blink::WebSecurityPolicy::ResetOriginAccessWhitelists();
+  blink::WebSecurityPolicy::ClearOriginAccessAllowList();
 }

@@ -214,6 +214,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
   void WasHidden(bool hidden) override;
   void NotifyScreenInfoChanged() override;
   void Invalidate(PaintElementType type) override;
+  void SendExternalBeginFrame() override;
   void SendKeyEvent(const CefKeyEvent& event) override;
   void SendMouseClickEvent(const CefMouseEvent& event,
                            MouseButtonType type,
@@ -402,7 +403,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
       const content::OpenURLParams& params) override;
   bool ShouldTransferNavigation(bool is_main_frame_navigation) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -426,7 +427,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
@@ -452,10 +453,13 @@ class CefBrowserHostImpl : public CefBrowserHost,
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) override;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   bool EmbedsFullscreenWidget() const override;
-  void EnterFullscreenModeForTab(content::WebContents* web_contents,
-                                 const GURL& origin) override;
+  void EnterFullscreenModeForTab(
+      content::WebContents* web_contents,
+      const GURL& origin,
+      const blink::WebFullscreenOptions& options) override;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const override;
@@ -474,8 +478,8 @@ class CefBrowserHostImpl : public CefBrowserHost,
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) override;
-  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
   bool IsNeverVisible(content::WebContents* web_contents) override;
@@ -492,6 +496,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
   void RenderProcessGone(base::TerminationStatus status) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void DidStopLoading() override;
   void DocumentAvailableInMainFrame() override;
   void DidFailLoad(content::RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
@@ -506,8 +511,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
   void AccessibilityEventReceived(
-      const std::vector<content::AXEventNotificationDetails>& eventData)
-      override;
+      const content::AXEventNotificationDetails& content_event_bundle) override;
   void AccessibilityLocationChangesReceived(
       const std::vector<content::AXLocationChangeNotificationDetails>& locData)
       override;
@@ -524,6 +528,20 @@ class CefBrowserHostImpl : public CefBrowserHost,
   bool StartMirroring();
   bool StopMirroring();
 
+  class NavigationLock final {
+   private:
+    friend class CefBrowserHostImpl;
+    friend std::unique_ptr<NavigationLock>::deleter_type;
+
+    explicit NavigationLock(CefRefPtr<CefBrowserHostImpl> browser);
+    ~NavigationLock();
+
+    CefRefPtr<CefBrowserHostImpl> browser_;
+  };
+
+  // Block navigation-related events on NavigationLock life span.
+  std::unique_ptr<NavigationLock> CreateNavigationLock();
+
  private:
   class DevToolsWebContentsObserver;
 
@@ -531,6 +549,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
       const CefBrowserSettings& settings,
       CefRefPtr<CefClient> client,
       content::WebContents* web_contents,
+      bool own_web_contents,
       scoped_refptr<CefBrowserInfo> browser_info,
       CefRefPtr<CefBrowserHostImpl> opener,
       bool is_devtools_popup,
@@ -568,6 +587,8 @@ class CefBrowserHostImpl : public CefBrowserHost,
       std::unique_ptr<CefBrowserPlatformDelegate> platform_delegate,
       CefRefPtr<CefExtension> extension);
 
+  void set_owned_web_contents(content::WebContents* owned_contents);
+
   // Give the platform delegate an opportunity to create the host window.
   bool CreateHostWindow();
 
@@ -580,6 +601,11 @@ class CefBrowserHostImpl : public CefBrowserHost,
   void DestroyExtensionHost();
   void OnExtensionHostDeleted();
 
+  // Returns true if navigation actions are currently locked.
+  bool navigation_locked() const;
+  // Action to be executed once the navigation lock is released.
+  void set_pending_navigation_action(base::OnceClosure action);
+
   // Update or create a frame object. |frame_id| (renderer routing id) will be
   // >= 0 if the frame currently exists in the renderer process. |frame_id| will
   // be < 0 for the main frame if it has not yet navigated for the first time,
@@ -590,13 +616,13 @@ class CefBrowserHostImpl : public CefBrowserHost,
   // if PlzNavigate is disabled; or >= 0 otherwise. |parent_frame_id| will be
   // CefFrameHostImpl::kUnspecifiedFrameId if unknown. In cases where |frame_id|
   // is < 0 either the existing main frame object or a pending object will be
-  // returned depending on current state. If |is_download| is true then the
-  // value of |is_main_frame| cannot be relied on.
+  // returned depending on current state. If |is_main_frame_state_flaky| is true
+  // then the value of |is_main_frame| cannot be relied on.
   CefRefPtr<CefFrame> GetOrCreateFrame(int64 frame_id,
                                        int frame_tree_node_id,
                                        int64 parent_frame_id,
                                        bool is_main_frame,
-                                       bool is_download,
+                                       bool is_main_frame_state_flaky,
                                        base::string16 frame_name,
                                        const GURL& frame_url);
 
@@ -630,6 +656,8 @@ class CefBrowserHostImpl : public CefBrowserHost,
   // Create the CefFileDialogManager if it doesn't already exist.
   void EnsureFileDialogManager();
 
+  void ConfigureAutoResize();
+
   // Send a message to the RenderViewHost associated with this browser.
   // TODO(cef): With the introduction of OOPIFs, WebContents can span multiple
   // processes. Messages should be sent to specific RenderFrameHosts instead.
@@ -637,7 +665,6 @@ class CefBrowserHostImpl : public CefBrowserHost,
 
   CefBrowserSettings settings_;
   CefRefPtr<CefClient> client_;
-  std::unique_ptr<content::WebContents> web_contents_;
   scoped_refptr<CefBrowserInfo> browser_info_;
   CefWindowHandle opener_;
   CefRefPtr<CefRequestContext> request_context_;
@@ -645,6 +672,12 @@ class CefBrowserHostImpl : public CefBrowserHost,
   const bool is_windowless_;
   const bool is_views_hosted_;
   CefWindowHandle host_window_handle_;
+
+  // Non-nullptr if this object owns the WebContents. Will be nullptr for popup
+  // browsers between the calls to WebContentsCreated() and AddNewContents(),
+  // and may never be set if the parent browser is destroyed during popup
+  // creation.
+  std::unique_ptr<content::WebContents> owned_web_contents_;
 
   // Volatile state information. All access must be protected by the state lock.
   base::Lock state_lock_;
@@ -679,9 +712,11 @@ class CefBrowserHostImpl : public CefBrowserHost,
   // thread.
   DestructionState destruction_state_;
 
-  // True if frame destruction is currently pending. Navigation should not occur
-  // while this flag is true.
-  bool frame_destruction_pending_;
+  // Navigation will not occur while |navigation_lock_count_| > 0.
+  // |pending_navigation_action_| will be executed when the lock is released.
+  // Only accessed on the UI thread.
+  int navigation_lock_count_ = 0;
+  base::OnceClosure pending_navigation_action_;
 
   // True if the OS window hosting the browser has been destroyed. Only accessed
   // on the UI thread.
@@ -721,7 +756,7 @@ class CefBrowserHostImpl : public CefBrowserHost,
   CefDevToolsFrontend* devtools_frontend_;
 
   // Observers that want to be notified of changes to this object.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // Used to provide unique incremental IDs for each find request.
   int find_request_id_counter_ = 0;
@@ -733,6 +768,11 @@ class CefBrowserHostImpl : public CefBrowserHost,
 
   // Used to mirror audio streams
   std::unique_ptr<CefAudioMirrorDestination> mirror_destination_;
+  
+  // Used with auto-resize.
+  bool auto_resize_enabled_ = false;
+  gfx::Size auto_resize_min_;
+  gfx::Size auto_resize_max_;
 
   IMPLEMENT_REFCOUNTING(CefBrowserHostImpl);
   DISALLOW_COPY_AND_ASSIGN(CefBrowserHostImpl);

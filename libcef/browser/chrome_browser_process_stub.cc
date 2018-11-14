@@ -14,8 +14,10 @@
 #include "chrome/browser/net/chrome_net_log_helper.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/net_log/net_export_file_writer.h"
 #include "content/public/common/content_switches.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 ChromeBrowserProcessStub::ChromeBrowserProcessStub()
     : initialized_(false),
@@ -110,8 +112,16 @@ ChromeBrowserProcessStub::system_network_context_manager() {
   return NULL;
 }
 
-content::NetworkConnectionTracker*
-ChromeBrowserProcessStub::network_connection_tracker() {
+net_log::NetExportFileWriter*
+ChromeBrowserProcessStub::net_export_file_writer() {
+  if (!net_export_file_writer_) {
+    net_export_file_writer_ = std::make_unique<net_log::NetExportFileWriter>();
+  }
+  return net_export_file_writer_.get();
+}
+
+network::NetworkQualityTracker*
+ChromeBrowserProcessStub::network_quality_tracker() {
   NOTREACHED();
   return NULL;
 }
@@ -134,6 +144,12 @@ PrefService* ChromeBrowserProcessStub::local_state() {
 
 net::URLRequestContextGetter*
 ChromeBrowserProcessStub::system_request_context() {
+  NOTREACHED();
+  return NULL;
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+ChromeBrowserProcessStub::shared_url_loader_factory() {
   NOTREACHED();
   return NULL;
 }
@@ -258,7 +274,6 @@ StatusTray* ChromeBrowserProcessStub::status_tray() {
 
 safe_browsing::SafeBrowsingService*
 ChromeBrowserProcessStub::safe_browsing_service() {
-  NOTREACHED();
   return NULL;
 }
 
@@ -318,12 +333,10 @@ ChromeBrowserProcessStub::media_file_system_registry() {
   return NULL;
 }
 
-#if BUILDFLAG(ENABLE_WEBRTC)
 WebRtcLogUploader* ChromeBrowserProcessStub::webrtc_log_uploader() {
   NOTREACHED();
   return NULL;
 }
-#endif
 
 network_time::NetworkTimeTracker*
 ChromeBrowserProcessStub::network_time_tracker() {
@@ -343,12 +356,6 @@ ChromeBrowserProcessStub::CachedDefaultWebClientState() {
 }
 
 resource_coordinator::TabManager* ChromeBrowserProcessStub::GetTabManager() {
-  NOTREACHED();
-  return NULL;
-}
-
-physical_web::PhysicalWebDataSource*
-ChromeBrowserProcessStub::GetPhysicalWebDataSource() {
   NOTREACHED();
   return NULL;
 }

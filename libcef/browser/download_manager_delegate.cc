@@ -17,8 +17,8 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/file_chooser_params.h"
 #include "net/base/filename_util.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 
 using download::DownloadItem;
 using content::DownloadManager;
@@ -90,7 +90,7 @@ class CefBeforeDownloadCallbackImpl : public CefBeforeDownloadCallback {
     }
 
     if (suggested_path.empty()) {
-      if (PathService::Get(base::DIR_TEMP, &suggested_path)) {
+      if (base::PathService::Get(base::DIR_TEMP, &suggested_path)) {
         // Use the temp directory.
         suggested_path = suggested_path.Append(suggested_name);
       } else {
@@ -129,7 +129,7 @@ class CefBeforeDownloadCallbackImpl : public CefBeforeDownloadCallback {
         handled = true;
 
         CefFileDialogRunner::FileChooserParams params;
-        params.mode = content::FileChooserParams::Save;
+        params.mode = blink::mojom::FileChooserParams::Mode::kSave;
         if (!suggested_path.empty()) {
           params.default_file_name = suggested_path;
           if (!suggested_path.Extension().empty()) {

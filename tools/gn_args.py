@@ -205,14 +205,6 @@ def GetRecommendedDefaultArgs():
   }
 
   if platform == 'linux':
-    # Use GTK3 instead of GTK2. Default is true. False is recommended because
-    # the cefclient sample application requires GTK2. This avoids the "GTK+ 2.x
-    # symbols detected. Using GTK+ 2.x and GTK+ 3 in the same process is not
-    # supported" error when running cefclient. Using a value of true is fine if
-    # your application requires GTK3 and you're not planning to build the
-    # cefclient target (see issue #2014).
-    result['use_gtk3'] = False
-
     # Use a sysroot environment. Default is true. False is recommended for local
     # builds.
     # Run the following commands to download the sysroot environment:
@@ -256,7 +248,20 @@ def GetRequiredArgs():
   if platform == 'linux':
     # Don't generate Chromium installer packages. This avoids GN dependency
     # errors with CEF (see issue #2301).
+    # Due to the way this variable is declared in chrome/installer/BUILD.gn it
+    # can't be enforced by assert().
     result['enable_linux_installer'] = False
+
+    # Use system fontconfig. This avoids a startup hang on Ubuntu 16.04.4 (see
+    # issue #2424).
+    result['use_bundled_fontconfig'] = False
+
+    # Disable vulkan to avoid linker errors.
+    # See https://bugs.chromium.org/p/chromium/issues/detail?id=848100#c4
+    result['enable_vulkan'] = False
+
+    # Build without GTK dependencies (see issue #2014).
+    result['use_gtk'] = False
 
   if platform == 'macosx':
     # Always generate dSYM files. The make_distrib script will fail if
@@ -426,10 +431,9 @@ def GetConfigArgs(args, is_debug, cpu):
   return result
 
 
-def WinGetConfigArgsSandbox(args, is_debug, cpu):
+def GetConfigArgsSandbox(platform, args, is_debug, cpu):
   """
-  Return merged GN args for the Windows cef_sandbox.lib configuration and
-  validate.
+  Return merged GN args for the cef_sandbox configuration and validate.
   """
   add_args = {
       # Avoid libucrt.lib linker errors.
@@ -510,13 +514,14 @@ def GetAllPlatformConfigs(build_args):
       result['Debug_GN_' + cpu] = GetConfigArgs(args, True, cpu)
     result['Release_GN_' + cpu] = GetConfigArgs(args, False, cpu)
 
-    if platform == 'windows' and GetArgValue(args, 'is_official_build'):
+    if platform in ('windows', 'macosx') and GetArgValue(
+        args, 'is_official_build'):
       # Build cef_sandbox.lib with a different configuration.
       if create_debug:
-        result['Debug_GN_' + cpu + '_sandbox'] = WinGetConfigArgsSandbox(
-            args, True, cpu)
-      result['Release_GN_' + cpu + '_sandbox'] = WinGetConfigArgsSandbox(
-          args, False, cpu)
+        result['Debug_GN_' + cpu + '_sandbox'] = GetConfigArgsSandbox(
+            platform, args, True, cpu)
+      result['Release_GN_' + cpu + '_sandbox'] = GetConfigArgsSandbox(
+          platform, args, False, cpu)
 
   return result
 

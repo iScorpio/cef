@@ -1,8 +1,8 @@
-diff --git third_party/WebKit/Source/core/input/PointerEventManager.cpp third_party/WebKit/Source/core/input/PointerEventManager.cpp
-index ce07c49a4777..ed1ef44ac2de 100644
---- third_party/WebKit/Source/core/input/PointerEventManager.cpp
-+++ third_party/WebKit/Source/core/input/PointerEventManager.cpp
-@@ -270,7 +270,7 @@ void PointerEventManager::HandlePointerInterruption(
+diff --git third_party/blink/renderer/core/input/pointer_event_manager.cc third_party/blink/renderer/core/input/pointer_event_manager.cc
+index 5b053a4de084..0f16f6af5b62 100644
+--- third_party/blink/renderer/core/input/pointer_event_manager.cc
++++ third_party/blink/renderer/core/input/pointer_event_manager.cc
+@@ -281,7 +281,7 @@ void PointerEventManager::HandlePointerInterruption(
    for (auto pointer_event : canceled_pointer_events) {
      // If we are sending a pointercancel we have sent the pointerevent to some
      // target before.

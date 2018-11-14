@@ -22,14 +22,16 @@ class CefBrowserPlatformDelegateBackground
   void CloseHostWindow() override;
   CefWindowHandle GetHostWindowHandle() const override;
   SkColor GetBackgroundColor() const override;
-  void WasResized() override;
+  bool CanUseSharedTexture() const override;
+  bool CanUseExternalBeginFrame() const override;
+  void SynchronizeVisualProperties() override;
   void SendKeyEvent(const content::NativeWebKeyboardEvent& event) override;
   void SendMouseEvent(const blink::WebMouseEvent& event) override;
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
   void SendFocusEvent(bool setFocus) override;
   gfx::Point GetScreenPoint(const gfx::Point& view) const override;
   void ViewText(const std::string& text) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   void HandleExternalProtocol(const GURL& url) override;
   void TranslateKeyEvent(content::NativeWebKeyboardEvent& result,

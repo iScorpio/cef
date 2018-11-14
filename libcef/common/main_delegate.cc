@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "libcef/common/main_delegate.h"
+#include "libcef/browser/browser_message_loop.h"
 #include "libcef/browser/content_browser_client.h"
 #include "libcef/browser/context.h"
 #include "libcef/common/cef_switches.h"
@@ -12,6 +13,7 @@
 #include "libcef/renderer/content_renderer_client.h"
 #include "libcef/utility/content_utility_client.h"
 
+#include "base/at_exit.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -28,16 +30,17 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/viz/common/features.h"
+#include "content/browser/browser_process_sub_thread.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "extensions/common/constants.h"
-#include "ipc/ipc_features.h"
+#include "ipc/ipc_buildflags.h"
 #include "pdf/pdf_ppapi.h"
+#include "services/service_manager/sandbox/switches.h"
 #include "ui/base/layout.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
@@ -96,6 +99,20 @@ void OverrideFrameworkBundlePath() {
   base::mac::SetOverrideFrameworkBundlePath(framework_path);
 }
 
+void OverrideOuterBundlePath() {
+  base::FilePath bundle_path = util_mac::GetMainBundlePath();
+  DCHECK(!bundle_path.empty());
+
+  base::mac::SetOverrideOuterBundlePath(bundle_path);
+}
+
+void OverrideBaseBundleID() {
+  std::string bundle_id = util_mac::GetMainBundleID();
+  DCHECK(!bundle_id.empty());
+
+  base::mac::SetBaseBundleID(bundle_id.c_str());
+}
+
 void OverrideChildProcessPath() {
   base::FilePath child_process_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
@@ -107,21 +124,21 @@ void OverrideChildProcessPath() {
   }
 
   // Used by ChildProcessHost::GetChildPath and PlatformCrashpadInitialization.
-  PathService::Override(content::CHILD_PROCESS_EXE, child_process_path);
+  base::PathService::Override(content::CHILD_PROCESS_EXE, child_process_path);
 }
 
 #else  // !defined(OS_MACOSX)
 
 base::FilePath GetResourcesFilePath() {
   base::FilePath pak_dir;
-  PathService::Get(base::DIR_MODULE, &pak_dir);
+  base::PathService::Get(base::DIR_MODULE, &pak_dir);
   return pak_dir;
 }
 
 // Use a "debug.log" file in the running executable's directory.
 base::FilePath GetDefaultLogFile() {
   base::FilePath log_path;
-  PathService::Get(base::DIR_EXE, &log_path);
+  base::PathService::Get(base::DIR_EXE, &log_path);
   return log_path.Append(FILE_PATH_LITERAL("debug.log"));
 }
 
@@ -168,8 +185,8 @@ void OverridePepperFlashSystemPluginPath() {
 #endif
 
   if (!plugin_filename.empty()) {
-    PathService::Override(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
-                          plugin_filename);
+    base::PathService::Override(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
+                                plugin_filename);
   }
 }
 
@@ -193,7 +210,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
 
 // Based on chrome/common/chrome_paths_mac.mm.
 bool GetDefaultUserDataDirectory(base::FilePath* result) {
-  if (!PathService::Get(base::DIR_APP_DATA, result))
+  if (!base::PathService::Get(base::DIR_APP_DATA, result))
     return false;
   *result = result->Append(FILE_PATH_LITERAL("CEF"));
   *result = result->Append(FILE_PATH_LITERAL("User Data"));
@@ -204,7 +221,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
 
 // Based on chrome/common/chrome_paths_win.cc.
 bool GetDefaultUserDataDirectory(base::FilePath* result) {
-  if (!PathService::Get(base::DIR_LOCAL_APP_DATA, result))
+  if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, result))
     return false;
   *result = result->Append(FILE_PATH_LITERAL("CEF"));
   *result = result->Append(FILE_PATH_LITERAL("User Data"));
@@ -222,7 +239,7 @@ base::FilePath GetUserDataPath() {
   if (GetDefaultUserDataDirectory(&result))
     return result;
 
-  if (PathService::Get(base::DIR_TEMP, &result))
+  if (base::PathService::Get(base::DIR_TEMP, &result))
     return result;
 
   NOTREACHED();
@@ -242,7 +259,7 @@ bool IsScaleFactorSupported(ui::ScaleFactor scale_factor) {
 // Used to run the UI on a separate thread.
 class CefUIThread : public base::Thread {
  public:
-  explicit CefUIThread(const content::MainFunctionParams& main_function_params)
+  CefUIThread(const content::MainFunctionParams& main_function_params)
       : base::Thread("CefUIThread"),
         main_function_params_(main_function_params) {}
 
@@ -263,6 +280,14 @@ class CefUIThread : public base::Thread {
   void CleanUp() override {
     browser_runner_->Shutdown();
     browser_runner_.reset(NULL);
+
+    // Release MessagePump resources registered with the AtExitManager.
+    base::MessageLoop* ml = const_cast<base::MessageLoop*>(message_loop());
+    base::MessageLoopCurrent::UnbindFromCurrentThreadInternal(ml);
+    ml->ReleasePump();
+
+    // Run exit callbacks on the UI thread to avoid sequence check failures.
+    base::AtExitManager::ProcessCallbacksNow();
 
 #if defined(OS_WIN)
     // Closes the COM library on the current thread. CoInitialize must
@@ -288,6 +313,11 @@ CefMainDelegate::CefMainDelegate(CefRefPtr<CefApp> application)
 
 CefMainDelegate::~CefMainDelegate() {}
 
+void CefMainDelegate::PreCreateMainMessageLoop() {
+  // Create the main message loop.
+  message_loop_.reset(new CefBrowserMessageLoop());
+}
+
 bool CefMainDelegate::BasicStartupComplete(int* exit_code) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   std::string process_type =
@@ -312,9 +342,6 @@ bool CefMainDelegate::BasicStartupComplete(int* exit_code) {
       const base::CommandLine::SwitchMap& map = command_line->GetSwitches();
       const_cast<base::CommandLine::SwitchMap*>(&map)->clear();
     }
-
-    if (settings.single_process)
-      command_line->AppendSwitch(switches::kSingleProcess);
 
     bool no_sandbox = settings.no_sandbox ? true : false;
 
@@ -343,7 +370,7 @@ bool CefMainDelegate::BasicStartupComplete(int* exit_code) {
 #endif
 
     if (no_sandbox)
-      command_line->AppendSwitch(switches::kNoSandbox);
+      command_line->AppendSwitch(service_manager::switches::kNoSandbox);
 
     if (settings.user_agent.length > 0) {
       command_line->AppendSwitchASCII(switches::kUserAgent,
@@ -437,38 +464,6 @@ bool CefMainDelegate::BasicStartupComplete(int* exit_code) {
           switches::kUncaughtExceptionStackSize,
           base::IntToString(settings.uncaught_exception_stack_size));
     }
-
-    std::vector<std::string> disable_features;
-
-    if (settings.windowless_rendering_enabled) {
-      // Disable AsyncWheelEvents when OSR is enabled to avoid DCHECKs in
-      // MouseWheelEventQueue.
-      if (features::kAsyncWheelEvents.default_state ==
-          base::FEATURE_ENABLED_BY_DEFAULT) {
-        disable_features.push_back(features::kAsyncWheelEvents.name);
-      }
-
-      // Disable SurfaceSynchronization when OSR is enabled, otherwise rendering
-      // will fail.
-      if (features::kEnableSurfaceSynchronization.default_state ==
-          base::FEATURE_ENABLED_BY_DEFAULT) {
-        disable_features.push_back(
-            features::kEnableSurfaceSynchronization.name);
-      }
-    }
-
-    if (!disable_features.empty()) {
-      DCHECK(!base::FeatureList::GetInstance());
-      std::string disable_features_str =
-          command_line->GetSwitchValueASCII(switches::kDisableFeatures);
-      for (auto feature_str : disable_features) {
-        if (!disable_features_str.empty())
-          disable_features_str += ",";
-        disable_features_str += feature_str;
-      }
-      command_line->AppendSwitchASCII(switches::kDisableFeatures,
-                                      disable_features_str);
-    }
   }
 
   if (content_client_.application().get()) {
@@ -527,6 +522,8 @@ bool CefMainDelegate::BasicStartupComplete(int* exit_code) {
 
 #if defined(OS_MACOSX)
   OverrideFrameworkBundlePath();
+  OverrideOuterBundlePath();
+  OverrideBaseBundleID();
 #endif
 
   return false;
@@ -547,13 +544,13 @@ void CefMainDelegate::PreSandboxStartup() {
     OverridePepperFlashSystemPluginPath();
 
     const base::FilePath& user_data_path = GetUserDataPath();
-    PathService::Override(chrome::DIR_USER_DATA, user_data_path);
+    base::PathService::Override(chrome::DIR_USER_DATA, user_data_path);
 
     // Path used for crash dumps.
-    PathService::Override(chrome::DIR_CRASH_DUMPS, user_data_path);
+    base::PathService::Override(chrome::DIR_CRASH_DUMPS, user_data_path);
 
     // Path used for spell checking dictionary files.
-    PathService::OverrideAndCreateIfNeeded(
+    base::PathService::OverrideAndCreateIfNeeded(
         chrome::DIR_APP_DICTIONARIES,
         user_data_path.AppendASCII("Dictionaries"),
         false,  // May not be an absolute path.
@@ -646,6 +643,9 @@ void CefMainDelegate::ShutdownBrowser() {
     browser_runner_->Shutdown();
     browser_runner_.reset(NULL);
   }
+
+  message_loop_.reset();
+
   if (ui_thread_.get()) {
     // Blocks until the thread has stopped.
     ui_thread_->Stop();
@@ -668,7 +668,7 @@ void CefMainDelegate::InitializeResourceBundle() {
   if (resources_dir.empty())
     resources_dir = GetResourcesFilePath();
   if (!resources_dir.empty())
-    PathService::Override(chrome::DIR_RESOURCES, resources_dir);
+    base::PathService::Override(chrome::DIR_RESOURCES, resources_dir);
 
   if (!content_client_.pack_loading_disabled()) {
     if (!resources_dir.empty()) {
@@ -688,14 +688,11 @@ void CefMainDelegate::InitializeResourceBundle() {
       locales_dir = command_line->GetSwitchValuePath(switches::kLocalesDirPath);
 
     if (!locales_dir.empty())
-      PathService::Override(ui::DIR_LOCALES, locales_dir);
+      base::PathService::Override(ui::DIR_LOCALES, locales_dir);
   }
 
   std::string locale = command_line->GetSwitchValueASCII(switches::kLang);
   DCHECK(!locale.empty());
-
-  // Avoid DCHECK() in ui::ResourceBundle::LoadChromeResources().
-  ui::MaterialDesignController::Initialize();
 
   const std::string loaded_locale =
       ui::ResourceBundle::InitSharedInstanceWithLocale(

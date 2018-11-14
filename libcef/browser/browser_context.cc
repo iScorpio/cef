@@ -105,6 +105,10 @@ void CefBrowserContext::Shutdown() {
   }
 }
 
+base::FilePath CefBrowserContext::GetCachePath() const {
+  return GetPath();
+}
+
 content::ResourceContext* CefBrowserContext::GetResourceContext() {
   return resource_context_.get();
 }
@@ -128,6 +132,12 @@ CefBrowserContext::CreateMediaRequestContextForStoragePartition(
 ChromeZoomLevelPrefs* CefBrowserContext::GetZoomLevelPrefs() {
   return static_cast<ChromeZoomLevelPrefs*>(
       GetStoragePartition(this, NULL)->GetZoomLevelDelegate());
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+CefBrowserContext::GetURLLoaderFactory() {
+  return GetDefaultStoragePartition(this)
+      ->GetURLLoaderFactoryForBrowserProcess();
 }
 
 void CefBrowserContext::OnRenderFrameDeleted(int render_process_id,

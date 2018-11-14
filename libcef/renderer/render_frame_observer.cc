@@ -4,23 +4,28 @@
 
 #include "base/compiler_specific.h"
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic error "-Wdeprecated-declarations"
+#else
 #pragma warning(push)
 #pragma warning(default : 4996)
+#endif
 #endif
 
 #include "libcef/renderer/render_frame_observer.h"
 
 #include "libcef/common/cef_messages.h"
 #include "libcef/common/content_client.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/content_renderer_client.h"
 #include "libcef/renderer/v8_impl.h"
-#include "libcef/renderer/webkit_glue.h"
 
 #include "content/public/renderer/render_frame.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 CefRenderFrameObserver::CefRenderFrameObserver(
     content::RenderFrame* render_frame)
@@ -35,7 +40,8 @@ void CefRenderFrameObserver::OnInterfaceRequestForFrame(
 }
 
 void CefRenderFrameObserver::DidStartProvisionalLoad(
-    blink::WebDocumentLoader* document_loader) {
+    blink::WebDocumentLoader* document_loader,
+    bool is_content_initiated) {
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   CefRefPtr<CefBrowserImpl> browserPtr =
       CefBrowserImpl::GetBrowserForMainFrame(frame->Top());
@@ -138,7 +144,7 @@ void CefRenderFrameObserver::WillReleaseScriptContext(
         // The released context should not be used for script execution.
         // Depending on how the context is released this may or may not already
         // be set.
-        webkit_glue::CefScriptForbiddenScope forbidScript;
+        blink_glue::CefScriptForbiddenScope forbidScript;
 
         CefRefPtr<CefV8Context> contextPtr(
             new CefV8ContextImpl(isolate, context));
@@ -156,7 +162,11 @@ void CefRenderFrameObserver::OnDestruct() {
   delete this;
 }
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic pop
+#else
 #pragma warning(pop)
+#endif
 #endif

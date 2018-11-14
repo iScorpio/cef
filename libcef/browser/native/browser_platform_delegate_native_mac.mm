@@ -20,9 +20,9 @@
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/underlay_opengl_hosting_window.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
@@ -99,6 +99,7 @@
 }
 
 - (void)cleanup:(id)window {
+  [window_ setDelegate:nil];
   [self release];
 }
 
@@ -143,7 +144,10 @@ NSUInteger NativeModifiers(int cef_modifiers) {
 CefBrowserPlatformDelegateNativeMac::CefBrowserPlatformDelegateNativeMac(
     const CefWindowInfo& window_info,
     SkColor background_color)
-    : CefBrowserPlatformDelegateNative(window_info, background_color),
+    : CefBrowserPlatformDelegateNative(window_info,
+                                       background_color,
+                                       false,
+                                       false),
       host_window_created_(false) {}
 
 void CefBrowserPlatformDelegateNativeMac::BrowserDestroyed(
@@ -217,7 +221,8 @@ bool CefBrowserPlatformDelegateNativeMac::CreateHostWindow() {
 
   // Parent the TabContents to the browser view.
   const NSRect bounds = [browser_view bounds];
-  NSView* native_view = browser_->web_contents()->GetNativeView();
+  NSView* native_view =
+      browser_->web_contents()->GetNativeView().GetNativeNSView();
   [browser_view addSubview:native_view];
   [native_view setFrame:bounds];
   [native_view setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
@@ -257,7 +262,8 @@ void CefBrowserPlatformDelegateNativeMac::SendFocusEvent(bool setFocus) {
 
     if (setFocus) {
       // Give keyboard focus to the native view.
-      NSView* view = browser_->web_contents()->GetContentNativeView();
+      NSView* view =
+          browser_->web_contents()->GetContentNativeView().GetNativeNSView();
       DCHECK([view canBecomeKeyView]);
       [[view window] makeFirstResponder:view];
     }
@@ -286,11 +292,12 @@ void CefBrowserPlatformDelegateNativeMac::ViewText(const std::string& text) {
   NOTIMPLEMENTED();
 }
 
-void CefBrowserPlatformDelegateNativeMac::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateNativeMac::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   // Give the top level menu equivalents a chance to handle the event.
   if ([event.os_event type] == NSKeyDown)
-    [[NSApp mainMenu] performKeyEquivalent:event.os_event];
+    return [[NSApp mainMenu] performKeyEquivalent:event.os_event];
+  return false;
 }
 
 void CefBrowserPlatformDelegateNativeMac::HandleExternalProtocol(
@@ -468,7 +475,8 @@ void CefBrowserPlatformDelegateNativeMac::TranslateMouseEvent(
                       TranslateModifiers(mouse_event.modifiers));
 
   // timestamp - Mac OSX specific
-  result.SetTimeStampSeconds(currentEventTimestamp());
+  result.SetTimeStamp(base::TimeTicks() +
+                      base::TimeDelta::FromSeconds(currentEventTimestamp()));
 
   result.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
 }

@@ -16,11 +16,6 @@
 #include "content/public/browser/browser_main_parts.h"
 #include "net/url_request/url_request_context_getter.h"
 
-namespace base {
-class MessageLoop;
-class Thread;
-}  // namespace base
-
 namespace content {
 struct MainFunctionParams;
 }
@@ -54,7 +49,7 @@ class CefBrowserMainParts : public content::BrowserMainParts {
   void PostMainMessageLoopStart() override;
   int PreCreateThreads() override;
   void ServiceManagerConnectionStarted(
-      content::ServiceManagerConnection* connection);
+      content::ServiceManagerConnection* connection) override;
   void PreMainMessageLoopRun() override;
   void PostMainMessageLoopRun() override;
   void PostDestroyThreads() override;
@@ -89,7 +84,6 @@ class CefBrowserMainParts : public content::BrowserMainParts {
 
   CefRefPtr<CefRequestContextImpl> global_request_context_;
   CefDevToolsDelegate* devtools_delegate_;  // Deletes itself.
-  std::unique_ptr<base::MessageLoop> message_loop_;
 
   std::unique_ptr<extensions::ExtensionsClient> extensions_client_;
   std::unique_ptr<extensions::ExtensionsBrowserClient>

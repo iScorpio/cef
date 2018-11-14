@@ -15,8 +15,13 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_widget_host.h"
 
-CefWebContentsViewOSR::CefWebContentsViewOSR(SkColor background_color)
-    : background_color_(background_color), web_contents_(NULL) {}
+CefWebContentsViewOSR::CefWebContentsViewOSR(SkColor background_color,
+                                             bool use_shared_texture,
+                                             bool use_external_begin_frame)
+    : background_color_(background_color),
+      use_shared_texture_(use_shared_texture),
+      use_external_begin_frame_(use_external_begin_frame),
+      web_contents_(NULL) {}
 
 CefWebContentsViewOSR::~CefWebContentsViewOSR() {}
 
@@ -109,19 +114,21 @@ content::RenderWidgetHostViewBase* CefWebContentsViewOSR::CreateViewForWidget(
   }
 
   const bool is_guest_view_hack = !!embedder_render_widget_host;
-  return new CefRenderWidgetHostViewOSR(background_color_, render_widget_host,
-                                        embedder_host_view, is_guest_view_hack);
+  return new CefRenderWidgetHostViewOSR(
+      background_color_, use_shared_texture_, use_external_begin_frame_,
+      render_widget_host, embedder_host_view, is_guest_view_hack);
 }
 
 // Called for popup and fullscreen widgets.
 content::RenderWidgetHostViewBase*
-CefWebContentsViewOSR::CreateViewForPopupWidget(
+CefWebContentsViewOSR::CreateViewForChildWidget(
     content::RenderWidgetHost* render_widget_host) {
   CefRenderWidgetHostViewOSR* view = GetView();
   CHECK(view);
 
-  return new CefRenderWidgetHostViewOSR(background_color_, render_widget_host,
-                                        view, false);
+  return new CefRenderWidgetHostViewOSR(background_color_, use_shared_texture_,
+                                        use_external_begin_frame_,
+                                        render_widget_host, view, false);
 }
 
 void CefWebContentsViewOSR::SetPageTitle(const base::string16& title) {}
@@ -135,18 +142,15 @@ void CefWebContentsViewOSR::RenderViewCreated(content::RenderViewHost* host) {
     view->InstallTransparency();
 }
 
-void CefWebContentsViewOSR::RenderViewSwappedIn(content::RenderViewHost* host) {
-}
+void CefWebContentsViewOSR::RenderViewReady() {}
+
+void CefWebContentsViewOSR::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {}
 
 void CefWebContentsViewOSR::SetOverscrollControllerEnabled(bool enabled) {}
 
 #if defined(OS_MACOSX)
-void CefWebContentsViewOSR::SetAllowOtherViews(bool allow) {}
-
-bool CefWebContentsViewOSR::GetAllowOtherViews() const {
-  return false;
-}
-
 bool CefWebContentsViewOSR::IsEventTracking() const {
   return false;
 }

@@ -7,10 +7,10 @@
 #pragma once
 
 #include "build/build_config.h"
+#include "media/media_buildflags.h"
+#include "third_party/widevine/cdm/buildflags.h"
 
-#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
-
-#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #include <vector>
 
@@ -19,7 +19,11 @@
 #include "base/lazy_instance.h"
 
 namespace content {
-struct PepperPluginInfo;
+struct CdmInfo;
+}
+
+namespace media {
+struct CdmHostFilePath;
 }
 
 class CefWidevineLoader {
@@ -38,10 +42,12 @@ class CefWidevineLoader {
 
 #if defined(OS_LINUX)
   // The zygote process which is used when the sandbox is enabled on Linux
-  // requires early loading of pepper plugins. Other processes will receive
+  // requires early loading of CDM modules. Other processes will receive
   // load notification in the usual way.
-  // Called from CefContentClient::AddPepperPlugins.
-  static void AddPepperPlugins(std::vector<content::PepperPluginInfo>* plugins);
+  // Called from CefContentClient::AddContentDecryptionModules.
+  static void AddContentDecryptionModules(
+      std::vector<content::CdmInfo>* cdms,
+      std::vector<media::CdmHostFilePath>* cdm_host_file_paths);
 
   const base::FilePath& path() { return path_; }
 #endif
@@ -59,6 +65,6 @@ class CefWidevineLoader {
   ~CefWidevineLoader();
 };
 
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #endif  // CEF_LIBCEF_COMMON_WIDEVINE_LOADER_H_

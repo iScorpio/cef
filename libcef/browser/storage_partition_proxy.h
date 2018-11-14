@@ -25,8 +25,10 @@ class CefStoragePartitionProxy : public content::StoragePartition {
   net::URLRequestContextGetter* GetURLRequestContext() override;
   net::URLRequestContextGetter* GetMediaURLRequestContext() override;
   network::mojom::NetworkContext* GetNetworkContext() override;
-  scoped_refptr<content::SharedURLLoaderFactory>
+  scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcess() override;
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+  GetURLLoaderFactoryForBrowserProcessIOThread() override;
   network::mojom::CookieManager* GetCookieManagerForBrowserProcess() override;
   storage::QuotaManager* GetQuotaManager() override;
   content::AppCacheService* GetAppCacheService() override;
@@ -38,6 +40,7 @@ class CefStoragePartitionProxy : public content::StoragePartition {
   content::ServiceWorkerContext* GetServiceWorkerContext() override;
   content::SharedWorkerService* GetSharedWorkerService() override;
   content::CacheStorageContext* GetCacheStorageContext() override;
+  content::GeneratedCodeCacheContext* GetGeneratedCodeCacheContext() override;
   content::HostZoomMap* GetHostZoomMap() override;
   content::HostZoomLevelContext* GetHostZoomLevelContext() override;
   content::ZoomLevelDelegate* GetZoomLevelDelegate() override;
@@ -49,14 +52,14 @@ class CefStoragePartitionProxy : public content::StoragePartition {
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
                  const GURL& storage_origin,
-                 const OriginMatcherFunction& origin_matcher,
                  const base::Time begin,
                  const base::Time end,
                  base::OnceClosure callback) override;
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
                  const OriginMatcherFunction& origin_matcher,
-                 const CookieMatcherFunction& cookie_matcher,
+                 network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
+                 bool perform_cleanup,
                  const base::Time begin,
                  const base::Time end,
                  base::OnceClosure callback) override;
@@ -65,7 +68,9 @@ class CefStoragePartitionProxy : public content::StoragePartition {
       const base::Time end,
       const base::Callback<bool(const GURL&)>& url_matcher,
       base::OnceClosure callback) override;
+  void ClearCodeCaches(base::OnceClosure callback) override;
   void Flush() override;
+  void ResetURLLoaderFactories() override;
   void ClearBluetoothAllowedDevicesMapForTesting() override;
   void FlushNetworkInterfaceForTesting() override;
   void WaitForDeletionTasksForTesting() override;
@@ -74,14 +79,14 @@ class CefStoragePartitionProxy : public content::StoragePartition {
   content::PaymentAppContextImpl* GetPaymentAppContext() override;
   content::BroadcastChannelProvider* GetBroadcastChannelProvider() override;
   content::BluetoothAllowedDevicesMap* GetBluetoothAllowedDevicesMap() override;
-  content::BlobURLLoaderFactory* GetBlobURLLoaderFactory() override;
   content::BlobRegistryWrapper* GetBlobRegistry() override;
   content::PrefetchURLLoaderService* GetPrefetchURLLoaderService() override;
+  content::CookieStoreContext* GetCookieStoreContext() override;
   content::URLLoaderFactoryGetter* url_loader_factory_getter() override;
   content::BrowserContext* browser_context() const override;
   mojo::BindingId Bind(
       int process_id,
-      mojo::InterfaceRequest<content::mojom::StoragePartitionService> request)
+      mojo::InterfaceRequest<blink::mojom::StoragePartitionService> request)
       override;
   void set_site_for_service_worker(
       const GURL& site_for_service_worker) override;

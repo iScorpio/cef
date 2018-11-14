@@ -15,8 +15,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/view_messages.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
+#include "ui/display/screen.h"
 
 class MacHelper : public content::BrowserCompositorMacClient,
                   public ui::AcceleratedWidgetMacNSView {
@@ -34,35 +36,43 @@ class MacHelper : public content::BrowserCompositorMacClient,
         view_->render_widget_host()->delegate()->IsFullscreenForCurrentTab()) {
       return SK_ColorBLACK;
     }
-    return view_->background_color();
+    return *view_->GetBackgroundColor();
   }
 
-  void BrowserCompositorMacOnBeginFrame() override {}
+  void BrowserCompositorMacOnBeginFrame(base::TimeTicks frame_time) override {}
 
   void OnFrameTokenChanged(uint32_t frame_token) override {
     view_->render_widget_host()->DidProcessFrame(frame_token);
   }
 
+  void DestroyCompositorForShutdown() override {}
+
+  bool SynchronizeVisualProperties(
+      const base::Optional<viz::LocalSurfaceId>&
+          child_allocated_local_surface_id,
+      const base::Optional<base::TimeTicks>&
+          child_local_surface_id_allocation_time) override {
+    auto* browser_compositor = view_->browser_compositor();
+    if (child_allocated_local_surface_id) {
+      browser_compositor->UpdateRendererLocalSurfaceIdFromChild(
+          *child_allocated_local_surface_id,
+          *child_local_surface_id_allocation_time);
+    } else {
+      browser_compositor->AllocateNewRendererLocalSurfaceId();
+    }
+
+    if (auto* host = browser_compositor->GetDelegatedFrameHost()) {
+      host->EmbedSurface(browser_compositor->GetRendererLocalSurfaceId(),
+                         browser_compositor->GetRendererSize(),
+                         cc::DeadlinePolicy::UseDefaultDeadline());
+    }
+
+    return view_->render_widget_host()->SynchronizeVisualProperties();
+  }
+
   // AcceleratedWidgetMacNSView methods:
 
-  NSView* AcceleratedWidgetGetNSView() const override {
-    // Intentionally return nil so that BrowserCompositorMac::GetViewProperties
-    // uses the layer size instead of the NSView size.
-    return nil;
-  }
-
-  void AcceleratedWidgetGetVSyncParameters(
-      base::TimeTicks* timebase,
-      base::TimeDelta* interval) const override {
-    *timebase = base::TimeTicks();
-    *interval = base::TimeDelta();
-  }
-
-  void AcceleratedWidgetSwapCompleted() override {}
-
-  void DidReceiveFirstFrameAfterNavigation() override {
-    view_->render_widget_host()->DidReceiveFirstFrameAfterNavigation();
-  }
+  void AcceleratedWidgetCALayerParamsUpdated() override {}
 
  private:
   // Guaranteed to outlive this object.
@@ -75,20 +85,57 @@ void CefRenderWidgetHostViewOSR::SetActive(bool active) {}
 
 void CefRenderWidgetHostViewOSR::ShowDefinitionForSelection() {}
 
-bool CefRenderWidgetHostViewOSR::SupportsSpeech() const {
-  return false;
-}
-
 void CefRenderWidgetHostViewOSR::SpeakSelection() {}
-
-bool CefRenderWidgetHostViewOSR::IsSpeaking() const {
-  return false;
-}
-
-void CefRenderWidgetHostViewOSR::StopSpeaking() {}
 
 bool CefRenderWidgetHostViewOSR::ShouldContinueToPauseForFrame() {
   return browser_compositor_->ShouldContinueToPauseForFrame();
+}
+
+viz::ScopedSurfaceIdAllocator
+CefRenderWidgetHostViewOSR::DidUpdateVisualProperties(
+    const cc::RenderFrameMetadata& metadata) {
+  base::OnceCallback<void()> allocation_task = base::BindOnce(
+      base::IgnoreResult(
+          &CefRenderWidgetHostViewOSR::OnDidUpdateVisualPropertiesComplete),
+      weak_ptr_factory_.GetWeakPtr(), metadata);
+  return browser_compositor_->GetScopedRendererSurfaceIdAllocator(
+      std::move(allocation_task));
+}
+
+display::Display CefRenderWidgetHostViewOSR::GetDisplay() {
+  content::ScreenInfo screen_info;
+  GetScreenInfo(&screen_info);
+
+  // Start with a reasonable display representation.
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestView(nullptr);
+
+  // Populate attributes based on |screen_info|.
+  display.set_bounds(screen_info.rect);
+  display.set_work_area(screen_info.available_rect);
+  display.set_device_scale_factor(screen_info.device_scale_factor);
+  display.set_color_space(screen_info.color_space);
+  display.set_color_depth(screen_info.depth);
+  display.set_depth_per_component(screen_info.depth_per_component);
+  display.set_is_monochrome(screen_info.is_monochrome);
+  display.SetRotationAsDegree(screen_info.orientation_angle);
+
+  return display;
+}
+
+void CefRenderWidgetHostViewOSR::OnDidUpdateVisualPropertiesComplete(
+    const cc::RenderFrameMetadata& metadata) {
+  DCHECK_EQ(current_device_scale_factor_, metadata.device_scale_factor);
+  browser_compositor_->SynchronizeVisualProperties(
+      metadata.device_scale_factor, metadata.viewport_size_in_pixels,
+      metadata.local_surface_id.value_or(viz::LocalSurfaceId()),
+      metadata.local_surface_id_allocation_time_from_child.value_or(
+          base::TimeTicks()));
+}
+
+const viz::LocalSurfaceId& CefRenderWidgetHostViewOSR::GetLocalSurfaceId()
+    const {
+  return browser_compositor_->GetRendererLocalSurfaceId();
 }
 
 ui::Compositor* CefRenderWidgetHostViewOSR::GetCompositor() const {
@@ -102,6 +149,11 @@ ui::Layer* CefRenderWidgetHostViewOSR::GetRootLayer() const {
 content::DelegatedFrameHost* CefRenderWidgetHostViewOSR::GetDelegatedFrameHost()
     const {
   return browser_compositor_->GetDelegatedFrameHost();
+}
+
+bool CefRenderWidgetHostViewOSR::UpdateNSViewAndDisplay() {
+  return browser_compositor_->UpdateNSViewAndDisplay(
+      GetRootLayer()->bounds().size(), GetDisplay());
 }
 
 void CefRenderWidgetHostViewOSR::PlatformCreateCompositorWidget(
@@ -121,12 +173,9 @@ void CefRenderWidgetHostViewOSR::PlatformCreateCompositorWidget(
 
   mac_helper_ = new MacHelper(this);
   browser_compositor_.reset(new content::BrowserCompositorMac(
-      mac_helper_, mac_helper_, render_widget_host_->is_hidden(), true,
+      mac_helper_, mac_helper_, render_widget_host_->is_hidden(), GetDisplay(),
       AllocateFrameSinkId(is_guest_view_hack)));
 }
-
-void CefRenderWidgetHostViewOSR::PlatformResizeCompositorWidget(
-    const gfx::Size&) {}
 
 void CefRenderWidgetHostViewOSR::PlatformDestroyCompositorWidget() {
   DCHECK(window_);

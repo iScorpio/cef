@@ -1,0 +1,12 @@
+diff --git chrome/browser/vr/BUILD.gn chrome/browser/vr/BUILD.gn
+index 8807045a1241..84c2d8e381ff 100644
+--- chrome/browser/vr/BUILD.gn
++++ chrome/browser/vr/BUILD.gn
+@@ -406,6 +406,7 @@ source_set("vr_base") {
+   ]
+ 
+   deps = [
++    ":vr_build_features",
+     "//base",
+     "//chrome/app:generated_resources",
+     "//components/rappor:rappor",

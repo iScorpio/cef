@@ -29,8 +29,19 @@
 #include "tests/shared/common/client_app_other.h"
 #include "tests/shared/renderer/client_app_renderer.h"
 
-#if defined(OS_WIN)
+#if defined(OS_MACOSX)
+#include "include/wrapper/cef_library_loader.h"
+#endif
+
+// When generating projects with CMake the CEF_USE_SANDBOX value will be defined
+// automatically if using the required compiler version. Pass -DUSE_SANDBOX=OFF
+// to the CMake command-line to disable use of the sandbox.
+#if defined(OS_WIN) && defined(CEF_USE_SANDBOX)
 #include "include/cef_sandbox_win.h"
+
+// The cef_sandbox.lib static library may not link successfully with all VS
+// versions.
+#pragma comment(lib, "cef_sandbox.lib")
 #endif
 
 namespace {
@@ -93,6 +104,14 @@ int XIOErrorHandlerImpl(Display* display) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+#if defined(OS_MACOSX)
+  // Load the CEF framework library at runtime instead of linking directly
+  // as required by the macOS sandbox implementation.
+  CefScopedLibraryLoader library_loader;
+  if (!library_loader.LoadInMain())
+    return 1;
+#endif
+
   // Create the singleton test suite object.
   CefTestSuite test_suite(argc, argv);
 
@@ -109,7 +128,7 @@ int main(int argc, char* argv[]) {
 
   void* windows_sandbox_info = NULL;
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) && defined(CEF_USE_SANDBOX)
   // Manages the life span of the sandbox information object.
   CefScopedSandboxInfo scoped_sandbox;
   windows_sandbox_info = scoped_sandbox.sandbox_info();
@@ -141,6 +160,11 @@ int main(int argc, char* argv[]) {
 #endif
 
   CefSettings settings;
+
+#if !defined(CEF_USE_SANDBOX)
+  settings.no_sandbox = true;
+#endif
+
   test_suite.GetSettings(settings);
 
 #if defined(OS_MACOSX)

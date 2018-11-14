@@ -23,7 +23,9 @@ class CefRenderWidgetHostViewOSR;
 class CefWebContentsViewOSR : public content::WebContentsView,
                               public content::RenderViewHostDelegateView {
  public:
-  explicit CefWebContentsViewOSR(SkColor background_color);
+  explicit CefWebContentsViewOSR(SkColor background_color,
+                                 bool use_shared_texture,
+                                 bool use_external_begin_frame);
   ~CefWebContentsViewOSR() override;
 
   void WebContentsCreated(content::WebContents* web_contents);
@@ -47,16 +49,16 @@ class CefWebContentsViewOSR : public content::WebContentsView,
   content::RenderWidgetHostViewBase* CreateViewForWidget(
       content::RenderWidgetHost* render_widget_host,
       content::RenderWidgetHost* embedder_render_widget_host) override;
-  content::RenderWidgetHostViewBase* CreateViewForPopupWidget(
+  content::RenderWidgetHostViewBase* CreateViewForChildWidget(
       content::RenderWidgetHost* render_widget_host) override;
   void SetPageTitle(const base::string16& title) override;
   void RenderViewCreated(content::RenderViewHost* host) override;
-  void RenderViewSwappedIn(content::RenderViewHost* host) override;
+  void RenderViewReady() override;
+  void RenderViewHostChanged(content::RenderViewHost* old_host,
+                             content::RenderViewHost* new_host) override;
   void SetOverscrollControllerEnabled(bool enabled) override;
 
 #if defined(OS_MACOSX)
-  void SetAllowOtherViews(bool allow) override;
-  bool GetAllowOtherViews() const override;
   bool IsEventTracking() const override;
   void CloseTabAfterEventTracking() override;
 #endif
@@ -80,6 +82,8 @@ class CefWebContentsViewOSR : public content::WebContentsView,
   CefBrowserHostImpl* GetBrowser() const;
 
   const SkColor background_color_;
+  const bool use_shared_texture_;
+  const bool use_external_begin_frame_;
 
   content::WebContents* web_contents_;
 

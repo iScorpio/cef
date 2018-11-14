@@ -25,7 +25,12 @@ class WebURL;
 namespace content {
 class BrowserPluginDelegate;
 class RenderFrame;
+struct WebPluginInfo;
 }  // namespace content
+
+namespace url {
+class Origin;
+}
 
 namespace extensions {
 
@@ -53,10 +58,12 @@ class CefExtensionsRendererClient : public ExtensionsRendererClient {
                           service_manager::BinderRegistry* registry);
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             const blink::WebPluginParams& params);
-  bool WillSendRequest(blink::WebLocalFrame* frame,
+  void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
-                       GURL* new_url);
+                       const url::Origin* initiator_origin,
+                       GURL* new_url,
+                       bool* attach_same_site_cookies);
   void RunScriptsAtDocumentStart(content::RenderFrame* render_frame);
   void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame);
   void RunScriptsAtDocumentIdle(content::RenderFrame* render_frame);
@@ -65,10 +72,10 @@ class CefExtensionsRendererClient : public ExtensionsRendererClient {
   static bool ShouldFork(blink::WebLocalFrame* frame,
                          const GURL& url,
                          bool is_initial_navigation,
-                         bool is_server_redirect,
-                         bool* send_referrer);
+                         bool is_server_redirect);
   static content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
+      const content::WebPluginInfo& info,
       const std::string& mime_type,
       const GURL& original_url);
 

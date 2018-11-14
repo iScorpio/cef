@@ -6,19 +6,15 @@
 #define CEF_LIBCEF_BROWSER_COOKIE_STORE_PROXY_H_
 #pragma once
 
-#include "include/cef_request_context_handler.h"
-
 #include "net/cookies/cookie_store.h"
 
-class CefURLRequestContextImpl;
+class CefCookieStoreSource;
 
-// Proxies cookie requests to the CefRequestContextHandler or global cookie
-// store. Life span is controlled by CefURLRequestContextProxy. Only accessed on
-// the IO thread. See browser_context.h for an object relationship diagram.
+// Proxies cookie requests to a CefCookieStoreSource (see comments on the
+// implementation classes for details). Only accessed on the IO thread.
 class CefCookieStoreProxy : public net::CookieStore {
  public:
-  CefCookieStoreProxy(CefURLRequestContextImpl* parent,
-                      CefRefPtr<CefRequestContextHandler> handler);
+  explicit CefCookieStoreProxy(std::unique_ptr<CefCookieStoreSource> source);
   ~CefCookieStoreProxy() override;
 
   // net::CookieStore methods.
@@ -39,14 +35,11 @@ class CefCookieStoreProxy : public net::CookieStore {
                          base::OnceClosure callback) override;
   void DeleteCanonicalCookieAsync(const net::CanonicalCookie& cookie,
                                   DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
-                                    const base::Time& delete_end,
-                                    DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenWithPredicateAsync(
-      const base::Time& delete_begin,
-      const base::Time& delete_end,
-      const CookiePredicate& predicate,
+  void DeleteAllCreatedInTimeRangeAsync(
+      const net::CookieDeletionInfo::TimeRange& creation_range,
       DeleteCallback callback) override;
+  void DeleteAllMatchingInfoAsync(net::CookieDeletionInfo delete_info,
+                                  DeleteCallback callback) override;
   void DeleteSessionCookiesAsync(DeleteCallback callback) override;
   void FlushStore(base::OnceClosure callback) override;
   net::CookieChangeDispatcher& GetChangeDispatcher() override;
@@ -55,11 +48,7 @@ class CefCookieStoreProxy : public net::CookieStore {
  private:
   net::CookieStore* GetCookieStore();
 
-  // The |parent_| pointer is kept alive by CefURLRequestContextGetterProxy
-  // which has a ref to the owning CefURLRequestContextGetterImpl.
-  CefURLRequestContextImpl* parent_;
-  CefRefPtr<CefRequestContextHandler> handler_;
-
+  std::unique_ptr<CefCookieStoreSource> const source_;
   std::unique_ptr<net::CookieChangeDispatcher> null_dispatcher_;
 
   DISALLOW_COPY_AND_ASSIGN(CefCookieStoreProxy);

@@ -7,6 +7,7 @@
 #include "libcef/browser/extensions/extensions_browser_client.h"
 
 #include "base/logging.h"
+#include "content/public/browser/web_contents.h"
 
 namespace extensions {
 
@@ -28,11 +29,12 @@ CefExtensionHostDelegate::GetJavaScriptDialogManager() {
   return NULL;
 }
 
-void CefExtensionHostDelegate::CreateTab(content::WebContents* web_contents,
-                                         const std::string& extension_id,
-                                         WindowOpenDisposition disposition,
-                                         const gfx::Rect& initial_rect,
-                                         bool user_gesture) {
+void CefExtensionHostDelegate::CreateTab(
+    std::unique_ptr<content::WebContents> web_contents,
+    const std::string& extension_id,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture) {
   // TODO(cef): Add support for extensions opening popup windows.
   NOTIMPLEMENTED();
 }
@@ -40,14 +42,14 @@ void CefExtensionHostDelegate::CreateTab(content::WebContents* web_contents,
 void CefExtensionHostDelegate::ProcessMediaAccessRequest(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     const Extension* extension) {
   // Never routed here from CefBrowserHostImpl.
   NOTREACHED();
 }
 
 bool CefExtensionHostDelegate::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type,
     const Extension* extension) {
@@ -58,6 +60,18 @@ bool CefExtensionHostDelegate::CheckMediaAccessPermission(
 
 ExtensionHostQueue* CefExtensionHostDelegate::GetExtensionHostQueue() const {
   return CefExtensionsBrowserClient::Get()->GetExtensionHostQueue();
+}
+
+gfx::Size CefExtensionHostDelegate::EnterPictureInPicture(
+    content::WebContents* web_contents,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) {
+  NOTREACHED();
+  return gfx::Size();
+}
+
+void CefExtensionHostDelegate::ExitPictureInPicture() {
+  NOTREACHED();
 }
 
 }  // namespace extensions

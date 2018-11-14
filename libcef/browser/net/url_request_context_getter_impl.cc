@@ -10,6 +10,8 @@
 
 #include "libcef/browser/content_browser_client.h"
 #include "libcef/browser/cookie_manager_impl.h"
+#include "libcef/browser/net/cookie_store_proxy.h"
+#include "libcef/browser/net/cookie_store_source.h"
 #include "libcef/browser/net/network_delegate.h"
 #include "libcef/browser/net/scheme_handler.h"
 #include "libcef/browser/net/url_request_interceptor.h"
@@ -18,7 +20,6 @@
 #include "libcef/common/content_client.h"
 
 #include "base/command_line.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
@@ -28,22 +29,22 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/certificate_transparency/chrome_ct_policy_enforcer.h"
+#include "components/certificate_transparency/ct_known_logs.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert/ct_known_logs.h"
 #include "net/cert/ct_log_verifier.h"
-#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/dns/host_resolver.h"
-#include "net/extras/sqlite/sqlite_persistent_cookie_store.h"
 #include "net/ftp/ftp_network_layer.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_preferences.h"
@@ -53,7 +54,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/proxy_resolution/dhcp_pac_file_fetcher_factory.h"
 #include "net/proxy_resolution/pac_file_fetcher_impl.h"
-#include "net/proxy_resolution/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request.h"
@@ -132,14 +133,14 @@ std::unique_ptr<net::ProxyResolutionService> CreateProxyResolutionService(
 
   std::unique_ptr<net::ProxyResolutionService> proxy_service;
   if (use_v8) {
-    std::unique_ptr<net::DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher;
-    net::DhcpProxyScriptFetcherFactory dhcp_factory;
-    dhcp_proxy_script_fetcher = dhcp_factory.Create(context);
+    std::unique_ptr<net::DhcpPacFileFetcher> dhcp_pac_file_fetcher;
+    net::DhcpPacFileFetcherFactory dhcp_factory;
+    dhcp_pac_file_fetcher = dhcp_factory.Create(context);
 
-    proxy_service = network::CreateProxyServiceUsingMojoFactory(
+    proxy_service = network::CreateProxyResolutionServiceUsingMojoFactory(
         std::move(proxy_resolver_factory), std::move(proxy_config_service),
-        std::make_unique<net::ProxyScriptFetcherImpl>(context),
-        std::move(dhcp_proxy_script_fetcher), context->host_resolver(), net_log,
+        net::PacFileFetcherImpl::Create(context),
+        std::move(dhcp_pac_file_fetcher), context->host_resolver(), net_log,
         network_delegate);
   } else {
     proxy_service = net::ProxyResolutionService::CreateUsingSystemProxyResolver(
@@ -153,6 +154,27 @@ std::unique_ptr<net::ProxyResolutionService> CreateProxyResolutionService(
           : net::ProxyResolutionService::SanitizeUrlPolicy::UNSAFE);
 
   return proxy_service;
+}
+
+// Based on net::ct::CreateLogVerifiersForKnownLogs which was deleted in
+// https://crrev.com/24711fe395.
+std::vector<scoped_refptr<const net::CTLogVerifier>>
+CreateLogVerifiersForKnownLogs() {
+  std::vector<scoped_refptr<const net::CTLogVerifier>> verifiers;
+
+  for (const auto& log : certificate_transparency::GetKnownLogs()) {
+    scoped_refptr<const net::CTLogVerifier> log_verifier =
+        net::CTLogVerifier::Create(
+            base::StringPiece(log.log_key, log.log_key_length), log.log_name,
+            log.log_dns_domain);
+    // Make sure no null logs enter verifiers. Parsing of all statically
+    // configured logs should always succeed, unless there has been binary or
+    // memory corruption.
+    CHECK(log_verifier);
+    verifiers.push_back(std::move(log_verifier));
+  }
+
+  return verifiers;
 }
 
 }  // namespace
@@ -179,7 +201,7 @@ CefURLRequestContextGetterImpl::CefURLRequestContextGetterImpl(
   std::swap(io_state_->protocol_handlers_, *protocol_handlers);
 
   auto io_thread_proxy =
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO});
 
   quick_check_enabled_.Init(prefs::kQuickCheckEnabled, pref_service);
   quick_check_enabled_.MoveToThread(io_thread_proxy);
@@ -304,14 +326,15 @@ net::URLRequestContext* CefURLRequestContextGetterImpl::GetURLRequestContext() {
         std::move(transport_security_state));
 
     std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
-        net::ct::CreateLogVerifiersForKnownLogs());
+        CreateLogVerifiersForKnownLogs());
     std::unique_ptr<net::MultiLogCTVerifier> ct_verifier(
         new net::MultiLogCTVerifier());
     ct_verifier->AddLogs(ct_logs);
     io_state_->storage_->set_cert_transparency_verifier(std::move(ct_verifier));
 
-    std::unique_ptr<net::CTPolicyEnforcer> ct_policy_enforcer(
-        new net::CTPolicyEnforcer);
+    std::unique_ptr<certificate_transparency::ChromeCTPolicyEnforcer>
+        ct_policy_enforcer(
+            new certificate_transparency::ChromeCTPolicyEnforcer);
     ct_policy_enforcer->set_enforce_net_security_expiration(
         settings_.enable_net_security_expiration ? true : false);
     io_state_->storage_->set_ct_policy_enforcer(std::move(ct_policy_enforcer));
@@ -328,7 +351,7 @@ net::URLRequestContext* CefURLRequestContextGetterImpl::GetURLRequestContext() {
         std::move(system_proxy_service));
 
     io_state_->storage_->set_ssl_config_service(
-        new net::SSLConfigServiceDefaults);
+        std::make_unique<net::SSLConfigServiceDefaults>());
 
     std::vector<std::string> supported_schemes;
     supported_schemes.push_back("basic");
@@ -336,18 +359,12 @@ net::URLRequestContext* CefURLRequestContextGetterImpl::GetURLRequestContext() {
     supported_schemes.push_back("ntlm");
     supported_schemes.push_back("negotiate");
 
-    io_state_->http_auth_preferences_.reset(new net::HttpAuthPreferences(
-        supported_schemes
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
-        ,
-        io_state_->gsapi_library_name_
-#endif
-        ));
+    io_state_->http_auth_preferences_.reset(new net::HttpAuthPreferences());
 
     io_state_->storage_->set_http_auth_handler_factory(
         net::HttpAuthHandlerRegistryFactory::Create(
-            io_state_->http_auth_preferences_.get(),
-            io_state_->url_request_context_->host_resolver()));
+            io_state_->url_request_context_->host_resolver(),
+            io_state_->http_auth_preferences_.get(), supported_schemes));
     io_state_->storage_->set_http_server_properties(
         base::WrapUnique(new net::HttpServerPropertiesImpl));
 
@@ -446,7 +463,7 @@ net::URLRequestContext* CefURLRequestContextGetterImpl::GetURLRequestContext() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 CefURLRequestContextGetterImpl::GetNetworkTaskRunner() const {
-  return BrowserThread::GetTaskRunnerForThread(CEF_IOT);
+  return base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO});
 }
 
 net::HostResolver* CefURLRequestContextGetterImpl::GetHostResolver() const {
@@ -457,57 +474,21 @@ void CefURLRequestContextGetterImpl::SetCookieStoragePath(
     const base::FilePath& path,
     bool persist_session_cookies) {
   CEF_REQUIRE_IOT();
-
-  if (io_state_->url_request_context_->cookie_store() &&
-      ((io_state_->cookie_store_path_.empty() && path.empty()) ||
-       io_state_->cookie_store_path_ == path)) {
-    // The path has not changed so don't do anything.
-    return;
+  if (!io_state_->cookie_source_) {
+    // Use a proxy because we can't change the URLRequestContext's CookieStore
+    // during runtime.
+    io_state_->cookie_source_ = new CefCookieStoreOwnerSource();
+    io_state_->storage_->set_cookie_store(std::make_unique<CefCookieStoreProxy>(
+        base::WrapUnique(io_state_->cookie_source_)));
   }
-
-  scoped_refptr<net::SQLitePersistentCookieStore> persistent_store;
-  if (!path.empty()) {
-    // TODO(cef): Move directory creation to the blocking pool instead of
-    // allowing file IO on this thread.
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-    if (base::DirectoryExists(path) || base::CreateDirectory(path)) {
-      const base::FilePath& cookie_path = path.AppendASCII("Cookies");
-      persistent_store = new net::SQLitePersistentCookieStore(
-          cookie_path, BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-          // Intentionally using the background task runner exposed by CEF to
-          // facilitate unit test expectations. This task runner MUST be
-          // configured with BLOCK_SHUTDOWN.
-          CefContentBrowserClient::Get()->background_task_runner(),
-          persist_session_cookies, NULL);
-    } else {
-      NOTREACHED() << "The cookie storage directory could not be created";
-    }
-  }
-
-  // Set the new cookie store that will be used for all new requests. The old
-  // cookie store, if any, will be automatically flushed and closed when no
-  // longer referenced.
-  std::unique_ptr<net::CookieMonster> cookie_monster(
-      new net::CookieMonster(persistent_store.get(), NULL));
-  if (persistent_store.get() && persist_session_cookies)
-    cookie_monster->SetPersistSessionCookies(true);
-  io_state_->cookie_store_path_ = path;
-
-  // Restore the previously supported schemes.
-  CefCookieManagerImpl::SetCookieMonsterSchemes(
-      cookie_monster.get(), io_state_->cookie_supported_schemes_);
-
-  io_state_->storage_->set_cookie_store(std::move(cookie_monster));
+  io_state_->cookie_source_->SetCookieStoragePath(path, persist_session_cookies,
+                                                  io_state_->net_log_);
 }
 
 void CefURLRequestContextGetterImpl::SetCookieSupportedSchemes(
     const std::vector<std::string>& schemes) {
   CEF_REQUIRE_IOT();
-
-  io_state_->cookie_supported_schemes_ = schemes;
-  CefCookieManagerImpl::SetCookieMonsterSchemes(
-      static_cast<net::CookieMonster*>(GetExistingCookieStore()),
-      io_state_->cookie_supported_schemes_);
+  io_state_->cookie_source_->SetCookieSupportedSchemes(schemes);
 }
 
 void CefURLRequestContextGetterImpl::AddHandler(
@@ -524,9 +505,8 @@ void CefURLRequestContextGetterImpl::AddHandler(
 net::CookieStore* CefURLRequestContextGetterImpl::GetExistingCookieStore()
     const {
   CEF_REQUIRE_IOT();
-  if (io_state_->url_request_context_ &&
-      io_state_->url_request_context_->cookie_store()) {
-    return io_state_->url_request_context_->cookie_store();
+  if (io_state_->cookie_source_) {
+    return io_state_->cookie_source_->GetCookieStore();
   }
 
   LOG(ERROR) << "Cookie store does not exist";

@@ -1,0 +1,137 @@
+diff --git base/message_loop/message_loop_current.cc base/message_loop/message_loop_current.cc
+index c87c4321d137..dbed6fc8f721 100644
+--- base/message_loop/message_loop_current.cc
++++ base/message_loop/message_loop_current.cc
+@@ -53,6 +53,8 @@ void MessageLoopCurrent::AddDestructionObserver(
+ 
+ void MessageLoopCurrent::RemoveDestructionObserver(
+     DestructionObserver* destruction_observer) {
++  if (!current_)
++    return;
+   DCHECK_CALLED_ON_VALID_THREAD(current_->bound_thread_checker_);
+   current_->destruction_observers_.RemoveObserver(destruction_observer);
+ }
+diff --git base/message_loop/message_loop_current.h base/message_loop/message_loop_current.h
+index 74af124dea5b..e81e86662a98 100644
+--- base/message_loop/message_loop_current.h
++++ base/message_loop/message_loop_current.h
+@@ -137,6 +137,16 @@ class BASE_EXPORT MessageLoopCurrent {
+   // posted tasks.
+   void SetAddQueueTimeToTasks(bool enable);
+ 
++#if defined(OS_WIN)
++  void set_os_modal_loop(bool os_modal_loop) {
++    os_modal_loop_ = os_modal_loop;
++  }
++
++  bool os_modal_loop() const {
++    return os_modal_loop_;
++  }
++#endif  // OS_WIN
++
+   // Enables or disables the recursive task processing. This happens in the case
+   // of recursive message loops. Some unwanted message loops may occur when
+   // using common controls or printer functions. By default, recursive task
+@@ -221,6 +231,13 @@ class BASE_EXPORT MessageLoopCurrent {
+   MessageLoop* ToMessageLoopDeprecated() const { return current_; }
+ 
+   MessageLoop* current_;
++
++#if defined(OS_WIN)
++ private:
++  // Should be set to true before calling Windows APIs like TrackPopupMenu, etc.
++  // which enter a modal message loop.
++  bool os_modal_loop_ = false;
++#endif
+ };
+ 
+ #if !defined(OS_NACL)
+diff --git base/message_loop/message_loop_impl.cc base/message_loop/message_loop_impl.cc
+index daf7ca47442a..cad42f7d30a3 100644
+--- base/message_loop/message_loop_impl.cc
++++ base/message_loop/message_loop_impl.cc
+@@ -724,6 +724,9 @@ MessageLoopForUI::MessageLoopForUI(Type type) : MessageLoop(type) {
+ #endif
+ }
+ 
++MessageLoopForUI::MessageLoopForUI(std::unique_ptr<MessagePump> pump)
++    : MessageLoop(TYPE_UI, BindOnce(&ReturnPump, std::move(pump))) {}
++
+ // static
+ MessageLoopCurrentForUI MessageLoopForUI::current() {
+   return MessageLoopCurrentForUI::Get();
+diff --git base/message_loop/message_loop_impl.h base/message_loop/message_loop_impl.h
+index 0b8c50532307..0f29ee2bb19a 100644
+--- base/message_loop/message_loop_impl.h
++++ base/message_loop/message_loop_impl.h
+@@ -200,6 +200,9 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
+   // Runs the specified PendingTask.
+   void RunTask(PendingTask* pending_task);
+ 
++  // Called from Thread::CleanUp() to release resources.
++  void ReleasePump() { pump_ = nullptr; }
++
+   //----------------------------------------------------------------------------
+  protected:
+   std::unique_ptr<MessagePump> pump_;
+@@ -372,6 +375,7 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
+ class BASE_EXPORT MessageLoopForUI : public MessageLoop {
+  public:
+   explicit MessageLoopForUI(Type type = TYPE_UI);
++  explicit MessageLoopForUI(std::unique_ptr<MessagePump> pump);
+ 
+   // TODO(gab): Mass migrate callers to MessageLoopCurrentForUI::Get()/IsSet().
+   static MessageLoopCurrentForUI current();
+diff --git base/message_loop/message_pump_win.cc base/message_loop/message_pump_win.cc
+index 1d6748e0e88a..1598fb65484e 100644
+--- base/message_loop/message_pump_win.cc
++++ base/message_loop/message_pump_win.cc
+@@ -11,6 +11,7 @@
+ 
+ #include "base/debug/alias.h"
+ #include "base/memory/ptr_util.h"
++#include "base/message_loop/message_loop_current.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/trace_event/trace_event.h"
+@@ -384,20 +385,28 @@ bool MessagePumpForUI::ProcessMessageHelper(const MSG& msg) {
+ }
+ 
+ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
+-  // When we encounter a kMsgHaveWork message, this method is called to peek and
+-  // process a replacement message. The goal is to make the kMsgHaveWork as non-
+-  // intrusive as possible, even though a continuous stream of such messages are
+-  // posted. This method carefully peeks a message while there is no chance for
+-  // a kMsgHaveWork to be pending, then resets the |have_work_| flag (allowing a
+-  // replacement kMsgHaveWork to possibly be posted), and finally dispatches
+-  // that peeked replacement. Note that the re-post of kMsgHaveWork may be
+-  // asynchronous to this thread!!
+-
++  // When we encounter a kMsgHaveWork message, this method is called to peek
++  // and process a replacement message, such as a WM_PAINT or WM_TIMER.  The
++  // goal is to make the kMsgHaveWork as non-intrusive as possible, even though
++  // a continuous stream of such messages are posted.  This method carefully
++  // peeks a message while there is no chance for a kMsgHaveWork to be pending,
++  // then resets the have_work_ flag (allowing a replacement kMsgHaveWork to
++  // possibly be posted), and finally dispatches that peeked replacement.  Note
++  // that the re-post of kMsgHaveWork may be asynchronous to this thread!!
++
++  bool have_message = false;
+   MSG msg;
+-  const bool have_message =
+-      ::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE;
++  // We should not process all window messages if we are in the context of an
++  // OS modal loop, i.e. in the context of a windows API call like MessageBox.
++  // This is to ensure that these messages are peeked out by the OS modal loop.
++  if (MessageLoopCurrent::Get()->os_modal_loop()) {
++    // We only peek out WM_PAINT and WM_TIMER here for reasons mentioned above.
++    have_message = PeekMessage(&msg, NULL, WM_PAINT, WM_PAINT, PM_REMOVE) ||
++                   PeekMessage(&msg, NULL, WM_TIMER, WM_TIMER, PM_REMOVE);
++  } else {
++    have_message = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != FALSE;
++  }
+ 
+-  // Expect no message or a message different than kMsgHaveWork.
+   DCHECK(!have_message || kMsgHaveWork != msg.message ||
+          msg.hwnd != message_window_.hwnd());
+ 

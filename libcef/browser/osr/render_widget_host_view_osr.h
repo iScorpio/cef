@@ -7,6 +7,7 @@
 #define CEF_LIBCEF_BROWSER_OSR_RENDER_WIDGET_HOST_VIEW_OSR_H_
 #pragma once
 
+#include <map>
 #include <set>
 #include <vector>
 
@@ -17,10 +18,12 @@
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
-#include "content/browser/renderer_host/compositor_resize_lock.h"
-#include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/public/common/widget_type.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/external_begin_frame_client.h"
+#include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_LINUX)
 #include "ui/base/x/x11_util.h"
@@ -34,11 +37,19 @@
 #include "ui/gfx/win/window_impl.h"
 #endif
 
+#if defined(USE_AURA)
+#include "third_party/blink/public/platform/web_cursor_info.h"
+#include "ui/base/cursor/cursor.h"
+#endif
+
 namespace content {
+class DelegatedFrameHost;
+class DelegatedFrameHostClient;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewGuest;
 class BackingStore;
+class CursorManager;
 }  // namespace content
 
 class CefBeginFrameTimer;
@@ -84,15 +95,12 @@ class MacHelper;
 #endif
 
 class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
-                                   public ui::CompositorDelegate
-#if !defined(OS_MACOSX)
-    ,
-                                   public content::DelegatedFrameHostClient,
-                                   public content::CompositorResizeLockClient
-#endif
-{
+                                   public ui::ExternalBeginFrameClient,
+                                   public ui::CompositorDelegate {
  public:
   CefRenderWidgetHostViewOSR(SkColor background_color,
+                             bool use_shared_texture,
+                             bool use_external_begin_frame,
                              content::RenderWidgetHost* widget,
                              CefRenderWidgetHostViewOSR* parent_host_view,
                              bool is_guest_view_hack);
@@ -102,28 +110,28 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   void InitAsChild(gfx::NativeView parent_view) override;
   void SetSize(const gfx::Size& size) override;
   void SetBounds(const gfx::Rect& rect) override;
-  gfx::Vector2dF GetLastScrollOffset() const override;
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void Focus() override;
   bool HasFocus() const override;
+  uint32_t GetCaptureSequenceNumber() const override;
   bool IsSurfaceAvailableForCopy() const override;
   void Show() override;
   void Hide() override;
   bool IsShowing() override;
+  void EnsureSurfaceSynchronizedForLayoutTest() override;
   gfx::Rect GetViewBounds() const override;
   void SetBackgroundColor(SkColor color) override;
-  SkColor background_color() const override;
+  base::Optional<SkColor> GetBackgroundColor() const override;
+  void UpdateBackgroundColor() override;
   bool LockMouse() override;
   void UnlockMouse() override;
+  void TakeFallbackContentFrom(content::RenderWidgetHostView* view) override;
 
 #if defined(OS_MACOSX)
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
-  bool SupportsSpeech() const override;
   void SpeakSelection() override;
-  bool IsSpeaking() const override;
-  void StopSpeaking() override;
   bool ShouldContinueToPauseForFrame() override;
 #endif  // defined(OS_MACOSX)
 
@@ -134,8 +142,9 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      viz::mojom::HitTestRegionListPtr hit_test_region_list) override;
+      base::Optional<viz::HitTestRegionList> hit_test_region_list) override;
   void ClearCompositorFrame() override;
+  void ResetFallbackToFirstNavigationSurface() override;
   void InitAsPopup(content::RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
   void InitAsFullscreen(
@@ -148,26 +157,25 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override;
+  content::CursorManager* GetCursorManager() override;
 
-  gfx::Size GetRequestedRendererSize() const override;
-  gfx::Size GetPhysicalBackingSize() const override;
+  gfx::Size GetCompositorViewportPixelSize() const override;
   void CopyFromSurface(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
   void GetScreenInfo(content::ScreenInfo* results) const override;
-  gfx::Vector2d GetOffsetFromRootSurface() override;
+  void TransformPointToRootSurface(gfx::PointF* point) override;
   gfx::Rect GetBoundsInRootWindow() override;
-  content::RenderWidgetHostImpl* GetRenderWidgetHostImpl() const override;
+#if defined(OS_MACOSX)
+  viz::ScopedSurfaceIdAllocator DidUpdateVisualProperties(
+      const cc::RenderFrameMetadata& metadata) override;
+#endif
   viz::SurfaceId GetCurrentSurfaceId() const override;
   content::BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       content::BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
 
-#if defined(TOOLKIT_VIEWS) || defined(USE_AURA)
-  void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                               const SkBitmap& zoomed_bitmap) override;
-#endif
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
@@ -175,49 +183,38 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   void SetNeedsBeginFrames(bool enabled) override;
   void SetWantsAnimateOnlyBeginFrames() override;
 
-  bool TransformPointToLocalCoordSpace(const gfx::PointF& point,
-                                       const viz::SurfaceId& original_surface,
-                                       gfx::PointF* transformed_point) override;
+  bool TransformPointToLocalCoordSpaceLegacy(
+      const gfx::PointF& point,
+      const viz::SurfaceId& original_surface,
+      gfx::PointF* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
-      gfx::PointF* transformed_point) override;
+      gfx::PointF* transformed_point,
+      viz::EventSource source = viz::EventSource::ANY) override;
   void DidNavigate() override;
 
   void SelectionChanged(const base::string16& text,
                         size_t offset,
                         const gfx::Range& range) override;
 
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
+  const viz::FrameSinkId& GetFrameSinkId() const override;
+
+  // ui::ExternalBeginFrameClient implementation:
+  void OnDisplayDidFinishFrame(const viz::BeginFrameAck& ack) override;
+  void OnNeedsExternalBeginFrames(bool needs_begin_frames) override;
+
   // ui::CompositorDelegate implementation.
   std::unique_ptr<viz::SoftwareOutputDevice> CreateSoftwareOutputDevice(
       ui::Compositor* compositor) override;
 
-#if !defined(OS_MACOSX)
-  // DelegatedFrameHostClient implementation.
-  ui::Layer* DelegatedFrameHostGetLayer() const override;
-  bool DelegatedFrameHostIsVisible() const override;
-  SkColor DelegatedFrameHostGetGutterColor() const override;
-  bool DelegatedFrameCanCreateResizeLock() const override;
-  std::unique_ptr<content::CompositorResizeLock>
-  DelegatedFrameHostCreateResizeLock() override;
-  viz::LocalSurfaceId GetLocalSurfaceId() const override;
-  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
-  void OnBeginFrame(base::TimeTicks frame_time) override;
-  bool IsAutoResizeEnabled() const override;
-  void OnFrameTokenChanged(uint32_t frame_token) override;
-  void DidReceiveFirstFrameAfterNavigation() override;
-
-  // CompositorResizeLockClient implementation.
-  std::unique_ptr<ui::CompositorLock> GetCompositorLock(
-      ui::CompositorLockClient* client) override;
-  void CompositorResizeLockEnded() override;
-#endif  // !defined(OS_MACOSX)
-
   bool InstallTransparency();
 
-  void WasResized();
+  void SynchronizeVisualProperties();
   void OnScreenInfoChanged();
   void Invalidate(CefBrowserHost::PaintElementType type);
+  void SendExternalBeginFrame();
   void SendKeyEvent(const content::NativeWebKeyboardEvent& event);
   void SendMouseEvent(const blink::WebMouseEvent& event);
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event);
@@ -232,7 +229,9 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
                int bitmap_height,
                void* bitmap_pixels);
 
-  bool IsPopupWidget() const { return popup_type_ != blink::kWebPopupTypeNone; }
+  bool IsPopupWidget() const {
+    return widget_type_ == content::WidgetType::kPopup;
+  }
 
   void ImeSetComposition(const CefString& text,
                          const std::vector<CefCompositionUnderline>& underlines,
@@ -242,7 +241,7 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
                      const CefRange& replacement_range,
                      int relative_cursor_pos);
   void ImeFinishComposingText(bool keep_selection);
-  void ImeCancelComposition();
+  void ImeCancelComposition() override;
 
   CefRefPtr<CefBrowserHostImpl> browser_impl() const { return browser_impl_; }
   void set_browser_impl(CefRefPtr<CefBrowserHostImpl> browser) {
@@ -262,14 +261,20 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   }
   ui::Layer* GetRootLayer() const;
 
-  viz::LocalSurfaceId local_surface_id() const { return local_surface_id_; }
+#if defined(OS_MACOSX)
+  content::BrowserCompositorMac* browser_compositor() const {
+    return browser_compositor_.get();
+  }
+#endif
+
+  void OnPresentCompositorFrame(uint32_t presentation_token);
 
  private:
   content::DelegatedFrameHost* GetDelegatedFrameHost() const;
 
   void SetFrameRate();
   void SetDeviceScaleFactor();
-  void ResizeRootLayer();
+  void ResizeRootLayer(bool force);
 
   // Called by CefBeginFrameTimer to send a BeginFrame request.
   void OnBeginFrameTimerTick();
@@ -296,15 +301,25 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
 
   viz::FrameSinkId AllocateFrameSinkId(bool is_guest_view_hack);
 
+  void AddDamageRect(uint32_t presentation_token, const gfx::Rect& rect);
+
   // Applies background color without notifying the RenderWidget about
   // opaqueness changes.
   void UpdateBackgroundColorFromRenderer(SkColor color);
 
 #if defined(OS_MACOSX)
+  display::Display GetDisplay();
+  void OnDidUpdateVisualPropertiesComplete(
+      const cc::RenderFrameMetadata& metadata);
+
   friend class MacHelper;
-#endif
+  bool UpdateNSViewAndDisplay();
+#endif  // defined(OS_MACOSX)
+
   void PlatformCreateCompositorWidget(bool is_guest_view_hack);
+#if !defined(OS_MACOSX)
   void PlatformResizeCompositorWidget(const gfx::Size& size);
+#endif
   void PlatformDestroyCompositorWidget();
 
 #if defined(USE_AURA)
@@ -320,11 +335,12 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   std::unique_ptr<ui::Compositor> compositor_;
   gfx::AcceleratedWidget compositor_widget_;
   std::unique_ptr<content::DelegatedFrameHost> delegated_frame_host_;
+  std::unique_ptr<content::DelegatedFrameHostClient>
+      delegated_frame_host_client_;
   std::unique_ptr<ui::Layer> root_layer_;
-#endif
-
   viz::LocalSurfaceId local_surface_id_;
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
+#endif
 
 #if defined(OS_WIN)
   std::unique_ptr<gfx::WindowImpl> window_;
@@ -338,6 +354,8 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   std::unique_ptr<ui::XScopedCursor> invisible_cursor_;
 #endif
 
+  std::unique_ptr<content::CursorManager> cursor_manager_;
+
   // Used to control the VSync rate in subprocesses when BeginFrame scheduling
   // is enabled.
   std::unique_ptr<CefBeginFrameTimer> begin_frame_timer_;
@@ -345,6 +363,10 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   // Provides |source_id| for BeginFrameArgs that we create.
   viz::StubBeginFrameSource begin_frame_source_;
   uint64_t begin_frame_number_ = viz::BeginFrameArgs::kStartingFrameNumber;
+
+  bool sync_frame_rate_ = false;
+  bool external_begin_frame_enabled_ = false;
+  bool needs_external_begin_frames_ = false;
 
   // Used for direct rendering from the compositor when GPU compositing is
   // disabled. This object is owned by the compositor.
@@ -372,13 +394,23 @@ class CefRenderWidgetHostViewOSR : public content::RenderWidgetHostViewBase,
   bool is_showing_;
   bool is_destroyed_;
   gfx::Rect popup_position_;
+  uint32_t presentation_token_ = 0;
+  base::Lock damage_rect_lock_;
+  std::map<uint32_t, gfx::Rect> damage_rects_;
 
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;
   bool is_scroll_offset_changed_pending_;
 
-  viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
-      nullptr;
+  content::MouseWheelPhaseHandler mouse_wheel_phase_handler_;
+
+  std::unique_ptr<viz::mojom::CompositorFrameSinkClient>
+      renderer_compositor_frame_sink_;
+
+  // Latest capture sequence number which is incremented when the caller
+  // requests surfaces be synchronized via
+  // EnsureSurfaceSynchronizedForLayoutTest().
+  uint32_t latest_capture_sequence_number_ = 0u;
 
   base::WeakPtrFactory<CefRenderWidgetHostViewOSR> weak_ptr_factory_;
 

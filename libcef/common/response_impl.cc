@@ -11,10 +11,10 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
-#include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/blink/public/platform/web_http_header_visitor.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 
 #define CHECK_READONLY_RETURN_VOID()       \
   if (read_only_) {                        \
@@ -173,7 +173,7 @@ void CefResponseImpl::SetResponseHeaders(
   base::AutoLock lock_scope(lock_);
   CHECK_READONLY_RETURN_VOID();
 
-  header_map_.empty();
+  header_map_.clear();
 
   size_t iter = 0;
   std::string name, value;

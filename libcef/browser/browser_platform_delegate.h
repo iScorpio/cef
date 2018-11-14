@@ -22,14 +22,14 @@ namespace blink {
 class WebMouseEvent;
 class WebMouseWheelEvent;
 class WebInputEvent;
-}
+}  // namespace blink
 
 namespace content {
 struct NativeWebKeyboardEvent;
 class RenderViewHost;
 class RenderViewHostDelegateView;
 class WebContentsView;
-}
+}  // namespace content
 
 #if defined(USE_AURA)
 namespace views {
@@ -139,8 +139,11 @@ class CefBrowserPlatformDelegate {
   // enable transparency.
   virtual SkColor GetBackgroundColor() const = 0;
 
+  virtual bool CanUseSharedTexture() const = 0;
+  virtual bool CanUseExternalBeginFrame() const = 0;
+
   // Notify the window that it was resized.
-  virtual void WasResized() = 0;
+  virtual void SynchronizeVisualProperties() = 0;
 
   // Send input events.
   virtual void SendKeyEvent(const content::NativeWebKeyboardEvent& event) = 0;
@@ -173,7 +176,7 @@ class CefBrowserPlatformDelegate {
 
   // Forward the keyboard event to the application or frame window to allow
   // processing of shortcut keys.
-  virtual void HandleKeyboardEvent(
+  virtual bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) = 0;
 
   // Invoke platform specific handling for the external protocol.
@@ -227,6 +230,8 @@ class CefBrowserPlatformDelegate {
   // Invalidate the view. Only used with windowless rendering.
   virtual void Invalidate(cef_paint_element_type_t type);
 
+  virtual void SendExternalBeginFrame();
+
   // Set the windowless frame rate. Only used with windowless rendering.
   virtual void SetWindowlessFrameRate(int frame_rate);
 
@@ -262,7 +267,7 @@ class CefBrowserPlatformDelegate {
   virtual void DragSourceEndedAt(int x, int y, cef_drag_operations_mask_t op);
   virtual void DragSourceSystemDragEnded();
   virtual void AccessibilityEventReceived(
-      const std::vector<content::AXEventNotificationDetails>& eventData);
+      const content::AXEventNotificationDetails& eventData);
   virtual void AccessibilityLocationChangesReceived(
       const std::vector<content::AXLocationChangeNotificationDetails>& locData);
 

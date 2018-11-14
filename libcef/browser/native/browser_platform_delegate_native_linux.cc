@@ -13,6 +13,7 @@
 #include "libcef/browser/native/window_x11.h"
 #include "libcef/browser/thread_util.h"
 
+#include "base/no_destructor.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/render_view_host.h"
@@ -41,7 +42,10 @@ long GetSystemUptime() {
 CefBrowserPlatformDelegateNativeLinux::CefBrowserPlatformDelegateNativeLinux(
     const CefWindowInfo& window_info,
     SkColor background_color)
-    : CefBrowserPlatformDelegateNative(window_info, background_color),
+    : CefBrowserPlatformDelegateNative(window_info,
+                                       background_color,
+                                       false,
+                                       false),
       host_window_created_(false),
       window_widget_(nullptr),
       window_x11_(nullptr) {}
@@ -78,8 +82,8 @@ bool CefBrowserPlatformDelegateNativeLinux::CreateHostWindow() {
   // Add a reference that will be released in BrowserDestroyed().
   browser_->AddRef();
 
-  CefWindowDelegateView* delegate_view =
-      new CefWindowDelegateView(GetBackgroundColor());
+  CefWindowDelegateView* delegate_view = new CefWindowDelegateView(
+      GetBackgroundColor(), window_x11_->TopLevelAlwaysOnTop());
   delegate_view->Init(window_info_.window, browser_->web_contents(),
                       gfx::Rect(gfx::Point(), rect.size()));
 
@@ -93,9 +97,6 @@ bool CefBrowserPlatformDelegateNativeLinux::CreateHostWindow() {
   content::RendererPreferences* prefs =
       browser_->web_contents()->GetMutableRendererPrefs();
   prefs->focus_ring_color = SkColorSetARGB(255, 229, 151, 0);
-  prefs->thumb_active_color = SkColorSetRGB(244, 244, 244);
-  prefs->thumb_inactive_color = SkColorSetRGB(234, 234, 234);
-  prefs->track_color = SkColorSetRGB(211, 211, 211);
 
   prefs->active_selection_bg_color = SkColorSetRGB(30, 144, 255);
   prefs->active_selection_fg_color = SK_ColorWHITE;
@@ -103,15 +104,14 @@ bool CefBrowserPlatformDelegateNativeLinux::CreateHostWindow() {
   prefs->inactive_selection_fg_color = SkColorSetRGB(50, 50, 50);
 
   // Set font-related attributes.
-  CR_DEFINE_STATIC_LOCAL(
-      const gfx::FontRenderParams, params,
-      (gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), NULL)));
-  prefs->should_antialias_text = params.antialiasing;
-  prefs->use_subpixel_positioning = params.subpixel_positioning;
-  prefs->hinting = params.hinting;
-  prefs->use_autohinter = params.autohinter;
-  prefs->use_bitmaps = params.use_bitmaps;
-  prefs->subpixel_rendering = params.subpixel_rendering;
+  static const base::NoDestructor<gfx::FontRenderParams> params(
+      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr));
+  prefs->should_antialias_text = params->antialiasing;
+  prefs->use_subpixel_positioning = params->subpixel_positioning;
+  prefs->hinting = params->hinting;
+  prefs->use_autohinter = params->autohinter;
+  prefs->use_bitmaps = params->use_bitmaps;
+  prefs->subpixel_rendering = params->subpixel_rendering;
 
   browser_->web_contents()->GetRenderViewHost()->SyncRendererPrefs();
 
@@ -228,9 +228,10 @@ void CefBrowserPlatformDelegateNativeLinux::ViewText(const std::string& text) {
   ALLOW_UNUSED_LOCAL(result);
 }
 
-void CefBrowserPlatformDelegateNativeLinux::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateNativeLinux::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   // TODO(cef): Is something required here to handle shortcut keys?
+  return false;
 }
 
 void CefBrowserPlatformDelegateNativeLinux::HandleExternalProtocol(
@@ -383,7 +384,8 @@ void CefBrowserPlatformDelegateNativeLinux::TranslateMouseEvent(
                       TranslateModifiers(mouse_event.modifiers));
 
   // timestamp
-  result.SetTimeStampSeconds(GetSystemUptime());
+  result.SetTimeStamp(base::TimeTicks() +
+                      base::TimeDelta::FromSeconds(GetSystemUptime()));
 
   result.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
 }

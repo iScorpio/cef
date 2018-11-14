@@ -36,6 +36,7 @@
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/public/browser/browser_url_handler.h"
+#include "content/public/browser/web_ui_controller.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/user_agent.h"
@@ -61,7 +62,7 @@ const char kChromeUIWebUIHostsHost[] = "webui-hosts";
 // testing all related functionality in CEF.
 const char* kAllowedWebUIHosts[] = {
     content::kChromeUIAppCacheInternalsHost,
-    content::kChromeUIAccessibilityHost,
+    chrome::kChromeUIAccessibilityHost,
     content::kChromeUIBlobInternalsHost,
     chrome::kChromeUICreditsHost,
     content::kChromeUIGpuHost,
@@ -211,24 +212,20 @@ class CefWebUIControllerFactory : public content::WebUIControllerFactory {
     return false;
   }
 
-  content::WebUIController* CreateWebUIControllerForURL(
+  std::unique_ptr<content::WebUIController> CreateWebUIControllerForURL(
       content::WebUI* web_ui,
       const GURL& url) const override {
-    content::WebUIController* controller = nullptr;
+    std::unique_ptr<content::WebUIController> controller;
     if (!AllowWebUIForURL(url))
       return controller;
 
     controller = content::ContentWebUIControllerFactory::GetInstance()
                      ->CreateWebUIControllerForURL(web_ui, url);
-    if (controller != nullptr)
+    if (controller.get())
       return controller;
 
-    controller = ChromeWebUIControllerFactory::GetInstance()
-                     ->CreateWebUIControllerForURL(web_ui, url);
-    if (controller != nullptr)
-      return controller;
-
-    return nullptr;
+    return ChromeWebUIControllerFactory::GetInstance()
+        ->CreateWebUIControllerForURL(web_ui, url);
   }
 
   content::WebUI::TypeID GetWebUIType(content::BrowserContext* browser_context,
@@ -437,7 +434,7 @@ std::string GetCommandLine() {
 
 std::string GetModulePath() {
   base::FilePath path;
-  if (PathService::Get(base::FILE_MODULE, &path))
+  if (base::PathService::Get(base::FILE_MODULE, &path))
     return CefString(path.value());
   return std::string();
 }

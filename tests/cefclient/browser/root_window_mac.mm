@@ -445,7 +445,7 @@ void RootWindowMac::WindowDestroyed() {
 
 void RootWindowMac::CreateBrowserWindow(const std::string& startup_url) {
   if (with_osr_) {
-    OsrRenderer::Settings settings = {};
+    OsrRendererSettings settings = {};
     MainContext::Get()->PopulateOsrSettings(&settings);
     browser_window_.reset(new BrowserWindowOsrMac(this, startup_url, settings));
   } else {
@@ -476,7 +476,13 @@ void RootWindowMac::CreateRootWindow(const CefBrowserSettings& settings,
   NSRect screen_rect = [[NSScreen mainScreen] visibleFrame];
   NSRect window_rect =
       NSMakeRect(x, screen_rect.size.height - y, width, height);
-  window_ = [[UnderlayOpenGLHostingWindow alloc]
+
+  // The CEF framework library is loaded at runtime so we need to use this
+  // mechanism for retrieving the class.
+  Class window_class = NSClassFromString(@"UnderlayOpenGLHostingWindow");
+  CHECK(window_class);
+
+  window_ = [[window_class alloc]
       initWithContentRect:window_rect
                 styleMask:(NSTitledWindowMask | NSClosableWindowMask |
                            NSMiniaturizableWindowMask | NSResizableWindowMask |

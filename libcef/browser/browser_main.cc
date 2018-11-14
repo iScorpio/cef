@@ -10,7 +10,6 @@
 
 #include "libcef/browser/browser_context_impl.h"
 #include "libcef/browser/browser_context_keyed_service_factories.h"
-#include "libcef/browser/browser_message_loop.h"
 #include "libcef/browser/content_browser_client.h"
 #include "libcef/browser/context.h"
 #include "libcef/browser/devtools_manager_delegate.h"
@@ -26,14 +25,15 @@
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/common/result_codes.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "net/base/net_module.h"
+#include "services/service_manager/embedder/result_codes.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(USE_AURA)
@@ -80,7 +80,7 @@ int CefBrowserMainParts::PreEarlyInitialization() {
   for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
     chrome_extra_parts_[i]->PreEarlyInitialization();
 
-  return content::RESULT_CODE_NORMAL_EXIT;
+  return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
 
 void CefBrowserMainParts::PostEarlyInitialization() {
@@ -107,11 +107,6 @@ void CefBrowserMainParts::ToolkitInitialized() {
 }
 
 void CefBrowserMainParts::PreMainMessageLoopStart() {
-  if (!base::MessageLoop::current()) {
-    // Create the browser message loop.
-    message_loop_.reset(new CefBrowserMessageLoop());
-  }
-
   for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
     chrome_extra_parts_[i]->PreMainMessageLoopStart();
 }
@@ -156,6 +151,8 @@ void CefBrowserMainParts::PreMainMessageLoopRun() {
   display::Screen::SetScreenInstance(views::CreateDesktopScreen());
 #endif
 
+  ui::MaterialDesignController::Initialize();
+
   // CEF's profile is a BrowserContext.
   PreProfileInit();
 
@@ -178,7 +175,7 @@ void CefBrowserMainParts::PreMainMessageLoopRun() {
   printing::CefPrintingMessageFilter::EnsureShutdownNotifierFactoryBuilt();
 
   background_task_runner_ = base::CreateSingleThreadTaskRunnerWithTraits(
-      {base::TaskPriority::BACKGROUND,
+      {base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock()});
   user_visible_task_runner_ = base::CreateSingleThreadTaskRunnerWithTraits(
       {base::TaskPriority::USER_VISIBLE,
@@ -222,16 +219,16 @@ void CefBrowserMainParts::PostMainMessageLoopRun() {
   DCHECK(global_request_context_->HasOneRef());
   global_request_context_ = NULL;
 
-  if (extensions::ExtensionsEnabled()) {
-    extensions::ExtensionsBrowserClient::Set(NULL);
-    extensions_browser_client_.reset();
-  }
-
   for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
     chrome_extra_parts_[i]->PostMainMessageLoopRun();
 }
 
 void CefBrowserMainParts::PostDestroyThreads() {
+  if (extensions::ExtensionsEnabled()) {
+    extensions::ExtensionsBrowserClient::Set(NULL);
+    extensions_browser_client_.reset();
+  }
+
 #if defined(USE_AURA)
   // Delete the DesktopTestViewsDelegate.
   delete views::ViewsDelegate::GetInstance();

@@ -35,11 +35,19 @@ CefWindowHandle CefBrowserPlatformDelegateBackground::GetHostWindowHandle()
   return kNullWindowHandle;
 }
 
+bool CefBrowserPlatformDelegateBackground::CanUseSharedTexture() const {
+  return native_delegate_->CanUseSharedTexture();
+}
+
+bool CefBrowserPlatformDelegateBackground::CanUseExternalBeginFrame() const {
+  return native_delegate_->CanUseExternalBeginFrame();
+}
+
 SkColor CefBrowserPlatformDelegateBackground::GetBackgroundColor() const {
   return native_delegate_->GetBackgroundColor();
 }
 
-void CefBrowserPlatformDelegateBackground::WasResized() {
+void CefBrowserPlatformDelegateBackground::SynchronizeVisualProperties() {
   // Nothing to do here.
 }
 
@@ -72,9 +80,10 @@ void CefBrowserPlatformDelegateBackground::ViewText(const std::string& text) {
   native_delegate_->ViewText(text);
 }
 
-void CefBrowserPlatformDelegateBackground::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateBackground::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   // Nothing to do here.
+  return false;
 }
 
 void CefBrowserPlatformDelegateBackground::HandleExternalProtocol(

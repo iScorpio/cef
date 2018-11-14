@@ -9,17 +9,24 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/url_constants.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::CefExtensionWebContentsObserver);
-
 namespace extensions {
 
 CefExtensionWebContentsObserver::CefExtensionWebContentsObserver(
     content::WebContents* web_contents)
     : ExtensionWebContentsObserver(web_contents),
-      script_executor_(
-          new ScriptExecutor(web_contents, &script_execution_observers_)) {}
+      script_executor_(new ScriptExecutor(web_contents)) {}
 
 CefExtensionWebContentsObserver::~CefExtensionWebContentsObserver() {}
+
+// static
+void CefExtensionWebContentsObserver::CreateForWebContents(
+    content::WebContents* web_contents) {
+  content::WebContentsUserData<
+      CefExtensionWebContentsObserver>::CreateForWebContents(web_contents);
+
+  // Initialize this instance if necessary.
+  FromWebContents(web_contents)->Initialize();
+}
 
 void CefExtensionWebContentsObserver::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
@@ -36,7 +43,7 @@ void CefExtensionWebContentsObserver::RenderFrameCreated(
   // are allowed to use chrome://resources/ URLs.
   if ((extension->is_extension() || extension->is_platform_app()) &&
       Manifest::IsComponentLocation(extension->location())) {
-    policy->GrantOrigin(
+    policy->GrantRequestOrigin(
         process_id, url::Origin::Create(GURL(content::kChromeUIResourcesURL)));
   }
 }

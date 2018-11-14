@@ -137,6 +137,7 @@ class CefBrowserContext : public ChromeProfileStub {
   virtual void Initialize();
 
   // BrowserContext methods.
+  base::FilePath GetCachePath() const override;
   content::ResourceContext* GetResourceContext() override;
   net::URLRequestContextGetter* GetRequestContext() override;
   net::URLRequestContextGetter* CreateMediaRequestContext() override;
@@ -146,6 +147,7 @@ class CefBrowserContext : public ChromeProfileStub {
 
   // Profile methods.
   ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
 
   // Returns a RequestContext associated with this object. If this object is a
   // *Proxy then it will return the single associated proxy RequestContext. If

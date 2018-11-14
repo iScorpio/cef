@@ -1,16 +1,16 @@
 diff --git net/base/network_delegate.h net/base/network_delegate.h
-index e3b6502ff7ee..a3b4b2d40d5f 100644
+index c989746999de..5797db42887d 100644
 --- net/base/network_delegate.h
 +++ net/base/network_delegate.h
 @@ -17,6 +17,7 @@
- #include "net/base/completion_callback.h"
+ #include "net/base/completion_once_callback.h"
  #include "net/base/net_export.h"
  #include "net/cookies/canonical_cookie.h"
 +#include "net/filter/source_stream.h"
  #include "net/proxy_resolution/proxy_retry_info.h"
  
  class GURL;
-@@ -127,6 +128,10 @@ class NET_EXPORT NetworkDelegate {
+@@ -123,6 +124,10 @@ class NET_EXPORT NetworkDelegate {
    bool CanUseReportingClient(const url::Origin& origin,
                               const GURL& endpoint) const;
  
@@ -22,10 +22,10 @@ index e3b6502ff7ee..a3b4b2d40d5f 100644
    THREAD_CHECKER(thread_checker_);
  
 diff --git net/url_request/url_request_job.cc net/url_request/url_request_job.cc
-index 2dad8a230652..71666b08a212 100644
+index f30efb45ba19..0fbf58817194 100644
 --- net/url_request/url_request_job.cc
 +++ net/url_request/url_request_job.cc
-@@ -450,6 +450,12 @@ void URLRequestJob::NotifyHeadersComplete() {
+@@ -466,6 +466,12 @@ void URLRequestJob::NotifyHeadersComplete() {
      DCHECK(!source_stream_);
      source_stream_ = SetUpSourceStream();
  

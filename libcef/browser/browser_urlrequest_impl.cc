@@ -19,8 +19,9 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/url_fetcher.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -63,26 +64,26 @@ class CefURLFetcherResponseWriter : public net::URLFetcherResponseWriter {
       : url_request_(url_request), task_runner_(task_runner) {}
 
   // net::URLFetcherResponseWriter methods.
-  int Initialize(const net::CompletionCallback& callback) override {
+  int Initialize(net::CompletionOnceCallback callback) override {
     return net::OK;
   }
 
   int Write(net::IOBuffer* buffer,
             int num_bytes,
-            const net::CompletionCallback& callback) override {
+            net::CompletionOnceCallback callback) override {
     if (url_request_.get()) {
       task_runner_->PostTask(
           FROM_HERE,
           base::Bind(&CefURLFetcherResponseWriter::WriteOnClientThread,
                      url_request_, scoped_refptr<net::IOBuffer>(buffer),
-                     num_bytes, callback,
+                     num_bytes, base::Passed(std::move(callback)),
                      CefTaskRunnerImpl::GetCurrentTaskRunner()));
       return net::ERR_IO_PENDING;
     }
     return num_bytes;
   }
 
-  int Finish(int net_error, const net::CompletionCallback& callback) override {
+  int Finish(int net_error, net::CompletionOnceCallback callback) override {
     if (url_request_.get())
       url_request_ = NULL;
     return net::OK;
@@ -93,7 +94,7 @@ class CefURLFetcherResponseWriter : public net::URLFetcherResponseWriter {
       CefRefPtr<CefBrowserURLRequest> url_request,
       scoped_refptr<net::IOBuffer> buffer,
       int num_bytes,
-      const net::CompletionCallback& callback,
+      net::CompletionOnceCallback callback,
       scoped_refptr<base::SequencedTaskRunner> source_message_loop_proxy) {
     CefRefPtr<CefURLRequestClient> client = url_request->GetClient();
     if (client.get())
@@ -102,12 +103,12 @@ class CefURLFetcherResponseWriter : public net::URLFetcherResponseWriter {
     source_message_loop_proxy->PostTask(
         FROM_HERE,
         base::Bind(&CefURLFetcherResponseWriter::ContinueOnSourceThread,
-                   num_bytes, callback));
+                   num_bytes, base::Passed(std::move(callback))));
   }
 
   static void ContinueOnSourceThread(int num_bytes,
-                                     const net::CompletionCallback& callback) {
-    callback.Run(num_bytes);
+                                     net::CompletionOnceCallback callback) {
+    std::move(callback).Run(num_bytes);
   }
 
   CefRefPtr<CefBrowserURLRequest> url_request_;
@@ -174,8 +175,8 @@ class CefBrowserURLRequest::Context
       return false;
     }
 
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {BrowserThread::UI},
         base::Bind(&CefBrowserURLRequest::Context::GetRequestContextOnUIThread,
                    this),
         base::Bind(&CefBrowserURLRequest::Context::ContinueOnOriginatingThread,

@@ -21,10 +21,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -34,6 +36,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "ipc/ipc_channel.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -52,11 +55,11 @@ class ResponseWriter : public net::URLFetcherResponseWriter {
   ~ResponseWriter() override;
 
   // URLFetcherResponseWriter overrides:
-  int Initialize(const net::CompletionCallback& callback) override;
+  int Initialize(net::CompletionOnceCallback callback) override;
   int Write(net::IOBuffer* buffer,
             int num_bytes,
-            const net::CompletionCallback& callback) override;
-  int Finish(int net_error, const net::CompletionCallback& callback) override;
+            net::CompletionOnceCallback callback) override;
+  int Finish(int net_error, net::CompletionOnceCallback callback) override;
 
  private:
   base::WeakPtr<CefDevToolsFrontend> shell_devtools_;
@@ -72,13 +75,13 @@ ResponseWriter::ResponseWriter(
 
 ResponseWriter::~ResponseWriter() {}
 
-int ResponseWriter::Initialize(const net::CompletionCallback& callback) {
+int ResponseWriter::Initialize(net::CompletionOnceCallback callback) {
   return net::OK;
 }
 
 int ResponseWriter::Write(net::IOBuffer* buffer,
                           int num_bytes,
-                          const net::CompletionCallback& callback) {
+                          net::CompletionOnceCallback callback) {
   std::string chunk = std::string(buffer->data(), num_bytes);
   if (!base::IsStringUTF8(chunk))
     return num_bytes;
@@ -86,8 +89,8 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
   base::Value* id = new base::Value(stream_id_);
   base::Value* chunkValue = new base::Value(chunk);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&CefDevToolsFrontend::CallClientFunction, shell_devtools_,
                      "DevToolsAPI.streamWrite", base::Owned(id),
                      base::Owned(chunkValue), nullptr));
@@ -95,12 +98,12 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
 }
 
 int ResponseWriter::Finish(int net_error,
-                           const net::CompletionCallback& callback) {
+                           net::CompletionOnceCallback callback) {
   return net::OK;
 }
 
 static std::string GetFrontendURL() {
-  return base::StringPrintf("%s://%s/inspector.html",
+  return base::StringPrintf("%s://%s/devtools_app.html",
                             content::kChromeDevToolsScheme,
                             scheme::kChromeDevToolsHost);
 }
@@ -167,9 +170,9 @@ void CefDevToolsFrontend::InspectElementAt(int x, int y) {
 }
 
 void CefDevToolsFrontend::Close() {
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(&CefBrowserHostImpl::CloseBrowser,
-                                              frontend_browser_.get(), true));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::Bind(&CefBrowserHostImpl::CloseBrowser,
+                                      frontend_browser_.get(), true));
 }
 
 void CefDevToolsFrontend::DisconnectFromTarget() {
@@ -299,9 +302,9 @@ void CefDevToolsFrontend::HandleMessageFromDevToolsFrontend(
               setting:
                 "It's not possible to disable this feature from settings."
               chrome_policy {
-                DeveloperToolsDisabled {
+                DeveloperToolsAvailability {
                   policy_options {mode: MANDATORY}
-                  DeveloperToolsDisabled: true
+                  DeveloperToolsAvailability: 2
                 }
               }
             })");

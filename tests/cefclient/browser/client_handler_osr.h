@@ -27,7 +27,7 @@ class ClientHandlerOsr : public ClientHandler,
     // These methods match the CefRenderHandler interface.
     virtual bool GetRootScreenRect(CefRefPtr<CefBrowser> browser,
                                    CefRect& rect) = 0;
-    virtual bool GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) = 0;
+    virtual void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) = 0;
     virtual bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
                                 int viewX,
                                 int viewY,
@@ -39,11 +39,16 @@ class ClientHandlerOsr : public ClientHandler,
     virtual void OnPopupSize(CefRefPtr<CefBrowser> browser,
                              const CefRect& rect) = 0;
     virtual void OnPaint(CefRefPtr<CefBrowser> browser,
-                         PaintElementType type,
-                         const RectList& dirtyRects,
+                         CefRenderHandler::PaintElementType type,
+                         const CefRenderHandler::RectList& dirtyRects,
                          const void* buffer,
                          int width,
                          int height) = 0;
+    virtual void OnAcceleratedPaint(
+        CefRefPtr<CefBrowser> browser,
+        CefRenderHandler::PaintElementType type,
+        const CefRenderHandler::RectList& dirtyRects,
+        void* share_handle) {}
     virtual void OnCursorChange(CefRefPtr<CefBrowser> browser,
                                 CefCursorHandle cursor,
                                 CefRenderHandler::CursorType type,
@@ -87,7 +92,7 @@ class ClientHandlerOsr : public ClientHandler,
 
   // CefRenderHandler methods.
   bool GetRootScreenRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
-  bool GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
+  void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
   bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
                       int viewX,
                       int viewY,
@@ -103,6 +108,10 @@ class ClientHandlerOsr : public ClientHandler,
                const void* buffer,
                int width,
                int height) OVERRIDE;
+  void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
+                          CefRenderHandler::PaintElementType type,
+                          const CefRenderHandler::RectList& dirtyRects,
+                          void* share_handle) OVERRIDE;
   void OnCursorChange(CefRefPtr<CefBrowser> browser,
                       CefCursorHandle cursor,
                       CursorType type,

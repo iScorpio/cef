@@ -13,8 +13,9 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
+#include "chrome/browser/accessibility/accessibility_ui.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/plugins/plugin_info_host_impl.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
@@ -43,7 +44,7 @@
 #include "components/update_client/update_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_prefs.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace browser_prefs {
@@ -86,7 +87,7 @@ std::unique_ptr<PrefService> CreatePrefService(Profile* profile,
     const base::FilePath& pref_path =
         cache_path.AppendASCII(browser_prefs::kUserPrefsFileName);
     scoped_refptr<JsonPrefStore> json_pref_store = new JsonPrefStore(
-        pref_path, sequenced_task_runner, std::unique_ptr<PrefFilter>());
+        pref_path, std::unique_ptr<PrefFilter>(), sequenced_task_runner);
     factory.set_user_prefs(json_pref_store.get());
   } else {
     scoped_refptr<CefPrefStore> cef_pref_store = new CefPrefStore();
@@ -142,6 +143,7 @@ std::unique_ptr<PrefService> CreatePrefService(Profile* profile,
       ->RegisterProfilePrefsForServices(profile, registry.get());
 
   // Default preferences.
+  AccessibilityUIMessageHandler::RegisterProfilePrefs(registry.get());
   CefMediaCaptureDevicesDispatcher::RegisterPrefs(registry.get());
   CefURLRequestContextGetterImpl::RegisterPrefs(registry.get());
   chrome_browser_net::RegisterPredictionOptionsProfilePrefs(registry.get());

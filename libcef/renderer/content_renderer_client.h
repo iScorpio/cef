@@ -25,6 +25,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/local_interface_provider.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_binding.h"
 
 namespace blink {
 class WebURLLoaderFactory;
@@ -112,17 +113,20 @@ class CefContentRendererClient : public content::ContentRendererClient,
                   const GURL& url,
                   const std::string& http_method,
                   bool is_initial_navigation,
-                  bool is_server_redirect,
-                  bool* send_referrer) override;
-  bool WillSendRequest(blink::WebLocalFrame* frame,
+                  bool is_server_redirect) override;
+  void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
-                       GURL* new_url) override;
+                       const url::Origin* initiator_origin,
+                       GURL* new_url,
+                       bool* attach_same_site_cookies) override;
   unsigned long long VisitedLinkHash(const char* canonical_url,
                                      size_t length) override;
   bool IsLinkVisited(unsigned long long link_hash) override;
+  bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path) override;
   content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
+      const content::WebPluginInfo& info,
       const std::string& mime_type,
       const GURL& original_url) override;
   void AddSupportedKeySystems(
@@ -137,7 +141,6 @@ class CefContentRendererClient : public content::ContentRendererClient,
       service_manager::mojom::ServiceRequest service_request) override;
 
   // service_manager::Service implementation.
-  void OnStart() override;
   void OnBindInterface(const service_manager::BindSourceInfo& remote_info,
                        const std::string& name,
                        mojo::ScopedMessagePipeHandle handle) override;
@@ -195,9 +198,7 @@ class CefContentRendererClient : public content::ContentRendererClient,
   bool single_process_cleanup_complete_;
   base::Lock single_process_cleanup_lock_;
 
-  std::unique_ptr<service_manager::Connector> connector_;
-  service_manager::mojom::ConnectorRequest connector_request_;
-  std::unique_ptr<service_manager::ServiceContext> service_context_;
+  service_manager::ServiceBinding service_binding_{this};
   service_manager::BinderRegistry registry_;
 
   DISALLOW_COPY_AND_ASSIGN(CefContentRendererClient);

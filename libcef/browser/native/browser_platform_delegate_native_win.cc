@@ -22,8 +22,8 @@
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "ui/aura/window.h"
 #include "ui/base/win/shell.h"
 #include "ui/display/display.h"
@@ -125,8 +125,13 @@ float GetWindowScaleFactor(HWND hwnd) {
 
 CefBrowserPlatformDelegateNativeWin::CefBrowserPlatformDelegateNativeWin(
     const CefWindowInfo& window_info,
-    SkColor background_color)
-    : CefBrowserPlatformDelegateNative(window_info, background_color),
+    SkColor background_color,
+    bool use_shared_texture,
+    bool use_external_begin_frame)
+    : CefBrowserPlatformDelegateNative(window_info,
+                                       background_color,
+                                       use_shared_texture,
+                                       use_external_begin_frame),
       host_window_created_(false),
       window_widget_(nullptr) {}
 
@@ -189,8 +194,15 @@ bool CefBrowserPlatformDelegateNativeWin::CreateHostWindow() {
   point =
       gfx::ToFlooredPoint(gfx::ScalePoint(gfx::PointF(point), 1.0f / scale));
 
+  // Stay on top if top-most window hosting the web view is topmost.
+  HWND top_level_window = GetAncestor(window_info_.window, GA_ROOT);
+  DWORD top_level_window_ex_styles =
+      GetWindowLongPtr(top_level_window, GWL_EXSTYLE);
+  bool always_on_top =
+      (top_level_window_ex_styles & WS_EX_TOPMOST) == WS_EX_TOPMOST;
+
   CefWindowDelegateView* delegate_view =
-      new CefWindowDelegateView(GetBackgroundColor());
+      new CefWindowDelegateView(GetBackgroundColor(), always_on_top);
   delegate_view->Init(window_info_.window, browser_->web_contents(),
                       gfx::Rect(0, 0, point.x(), point.y()));
 
@@ -327,19 +339,19 @@ void CefBrowserPlatformDelegateNativeWin::ViewText(const std::string& text) {
   CEF_POST_USER_VISIBLE_TASK(base::Bind(WriteTempFileAndView, str_ref));
 }
 
-void CefBrowserPlatformDelegateNativeWin::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateNativeWin::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   // Any unhandled keyboard/character messages are sent to DefWindowProc so that
   // shortcut keys work correctly.
   if (event.os_event) {
     const MSG& msg = event.os_event->native_event();
-    DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+    return !DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
   } else {
     MSG msg = {};
 
     msg.hwnd = GetHostWindowHandle();
     if (!msg.hwnd)
-      return;
+      return false;
 
     switch (event.GetType()) {
       case blink::WebInputEvent::kRawKeyDown:
@@ -353,7 +365,7 @@ void CefBrowserPlatformDelegateNativeWin::HandleKeyboardEvent(
         break;
       default:
         NOTREACHED();
-        return;
+        return false;
     }
 
     msg.wParam = event.windows_key_code;
@@ -364,7 +376,7 @@ void CefBrowserPlatformDelegateNativeWin::HandleKeyboardEvent(
     if (event.GetModifiers() & content::NativeWebKeyboardEvent::kAltKey)
       msg.lParam |= (1 << 29);
 
-    DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+    return !DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
   }
 }
 
@@ -557,7 +569,8 @@ void CefBrowserPlatformDelegateNativeWin::TranslateMouseEvent(
                       TranslateModifiers(mouse_event.modifiers));
 
   // timestamp
-  result.SetTimeStampSeconds(GetMessageTime() / 1000.0);
+  result.SetTimeStamp(base::TimeTicks() +
+                      base::TimeDelta::FromMilliseconds(GetMessageTime()));
 
   result.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
 }

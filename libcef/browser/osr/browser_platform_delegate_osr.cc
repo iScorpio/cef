@@ -13,6 +13,7 @@
 #include "libcef/browser/osr/web_contents_view_osr.h"
 #include "libcef/common/drag_data_impl.h"
 
+#include "base/message_loop/message_loop_current.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_view_host.h"
@@ -29,7 +30,8 @@ void CefBrowserPlatformDelegateOsr::CreateViewForWebContents(
   DCHECK(!view_osr_);
 
   // Use the OSR view instead of the default platform view.
-  view_osr_ = new CefWebContentsViewOSR(GetBackgroundColor());
+  view_osr_ = new CefWebContentsViewOSR(
+      GetBackgroundColor(), CanUseSharedTexture(), CanUseExternalBeginFrame());
   *view = view_osr_;
   *delegate_view = view_osr_;
 }
@@ -68,14 +70,22 @@ void CefBrowserPlatformDelegateOsr::BrowserDestroyed(
   view_osr_ = nullptr;
 }
 
+bool CefBrowserPlatformDelegateOsr::CanUseSharedTexture() const {
+  return native_delegate_->CanUseSharedTexture();
+}
+
+bool CefBrowserPlatformDelegateOsr::CanUseExternalBeginFrame() const {
+  return native_delegate_->CanUseExternalBeginFrame();
+}
+
 SkColor CefBrowserPlatformDelegateOsr::GetBackgroundColor() const {
   return native_delegate_->GetBackgroundColor();
 }
 
-void CefBrowserPlatformDelegateOsr::WasResized() {
+void CefBrowserPlatformDelegateOsr::SynchronizeVisualProperties() {
   CefRenderWidgetHostViewOSR* view = GetOSRHostView();
   if (view)
-    view->WasResized();
+    view->SynchronizeVisualProperties();
 }
 
 void CefBrowserPlatformDelegateOsr::SendKeyEvent(
@@ -122,9 +132,9 @@ void CefBrowserPlatformDelegateOsr::ViewText(const std::string& text) {
   native_delegate_->ViewText(text);
 }
 
-void CefBrowserPlatformDelegateOsr::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateOsr::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  native_delegate_->HandleKeyboardEvent(event);
+  return native_delegate_->HandleKeyboardEvent(event);
 }
 
 void CefBrowserPlatformDelegateOsr::HandleExternalProtocol(const GURL& url) {
@@ -191,15 +201,7 @@ bool CefBrowserPlatformDelegateOsr::IsViewsHosted() const {
 }
 
 void CefBrowserPlatformDelegateOsr::WasHidden(bool hidden) {
-  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
-  if (view) {
-    if (hidden)
-      view->Hide();
-    else
-      view->Show();
-  }
-
-  // Also notify the WebContentsImpl for consistency.
+  // The WebContentsImpl will notify the OSR view.
   content::WebContentsImpl* web_contents =
       static_cast<content::WebContentsImpl*>(browser_->web_contents());
   if (web_contents) {
@@ -220,6 +222,12 @@ void CefBrowserPlatformDelegateOsr::Invalidate(cef_paint_element_type_t type) {
   CefRenderWidgetHostViewOSR* view = GetOSRHostView();
   if (view)
     view->Invalidate(type);
+}
+
+void CefBrowserPlatformDelegateOsr::SendExternalBeginFrame() {
+  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
+  if (view)
+    view->SendExternalBeginFrame();
 }
 
 void CefBrowserPlatformDelegateOsr::SetWindowlessFrameRate(int frame_rate) {
@@ -455,8 +463,7 @@ void CefBrowserPlatformDelegateOsr::StartDragging(
     CefRefPtr<CefDragDataImpl> drag_data(
         new CefDragDataImpl(drop_data, cef_image, cef_image_pos));
     drag_data->SetReadOnly(true);
-    base::MessageLoop::ScopedNestableTaskAllower allow(
-        base::MessageLoop::current());
+    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
     handled = handler->StartDragging(
         browser_, drag_data.get(),
         static_cast<CefRenderHandler::DragOperationsMask>(allowed_ops),
@@ -535,7 +542,7 @@ void CefBrowserPlatformDelegateOsr::DragSourceSystemDragEnded() {
 }
 
 void CefBrowserPlatformDelegateOsr::AccessibilityEventReceived(
-    const std::vector<content::AXEventNotificationDetails>& eventData) {
+    const content::AXEventNotificationDetails& eventData) {
   CefRefPtr<CefRenderHandler> handler = browser_->client()->GetRenderHandler();
   if (handler.get()) {
     CefRefPtr<CefAccessibilityHandler> acchandler =

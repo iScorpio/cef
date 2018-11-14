@@ -31,10 +31,11 @@ class CefSpeechRecognitionManagerDelegate
   void OnRecognitionEnd(int session_id) override;
   void OnRecognitionResults(
       int session_id,
-      const content::SpeechRecognitionResults& result) override;
+      const std::vector<blink::mojom::SpeechRecognitionResultPtr>& result)
+      override;
   void OnRecognitionError(
       int session_id,
-      const content::SpeechRecognitionError& error) override;
+      const blink::mojom::SpeechRecognitionError& error) override;
   void OnAudioLevelsChange(int session_id,
                            float volume,
                            float noise_volume) override;
@@ -48,13 +49,6 @@ class CefSpeechRecognitionManagerDelegate
   bool FilterProfanities(int render_process_id) override;
 
  private:
-  class WebContentsWatcher;
-
-  // Callback called by |web_contents_watcher_| on the IO thread to signal
-  // web contents closure.
-  void WebContentsClosedCallback(int render_process_id, int render_view_id);
-
-  scoped_refptr<WebContentsWatcher> web_contents_watcher_;
   bool filter_profanities_;
 
   DISALLOW_COPY_AND_ASSIGN(CefSpeechRecognitionManagerDelegate);

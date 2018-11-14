@@ -10,7 +10,7 @@
 #include "libcef/browser/browser_host_impl.h"
 #include "libcef/browser/content_browser_client.h"
 
-#include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/blink/public/platform/web_cursor_info.h"
 #include "ui/resources/grit/ui_unscaled_resources.h"
 
 namespace {
@@ -26,9 +26,11 @@ class CefCompositorHostWin : public gfx::WindowImpl {
   ~CefCompositorHostWin() override { DestroyWindow(hwnd()); }
 
  private:
-  CR_BEGIN_MSG_MAP_EX(CompositorHostWin)
+  CR_BEGIN_MSG_MAP_EX(CefCompositorHostWin)
     CR_MSG_WM_PAINT(OnPaint)
   CR_END_MSG_MAP()
+
+  CR_MSG_MAP_CLASS_DECLARATIONS(CefCompositorHostWin)
 
   void OnPaint(HDC dc) { ValidateRect(hwnd(), NULL); }
 

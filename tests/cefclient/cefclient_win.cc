@@ -25,8 +25,8 @@
 // #define CEF_USE_SANDBOX 1
 
 #if defined(CEF_USE_SANDBOX)
-// The cef_sandbox.lib static library is currently built with VS2015. It may not
-// link successfully with other VS versions.
+// The cef_sandbox.lib static library may not link successfully with all VS
+// versions.
 #pragma comment(lib, "cef_sandbox.lib")
 #endif
 
@@ -95,6 +95,7 @@ int RunMain(HINSTANCE hInstance, int nCmdShow) {
   test_runner::RegisterSchemeHandlers();
 
   RootWindowConfig window_config;
+  window_config.always_on_top = command_line->HasSwitch(switches::kAlwaysOnTop);
   window_config.with_controls =
       !command_line->HasSwitch(switches::kHideControls);
   window_config.with_osr = settings.windowless_rendering_enabled ? true : false;

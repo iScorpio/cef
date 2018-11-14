@@ -10,7 +10,6 @@
 #include "base/observer_list.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/browser/extension_web_contents_observer.h"
-#include "extensions/browser/script_execution_observer.h"
 #include "extensions/browser/script_executor.h"
 
 namespace extensions {
@@ -22,6 +21,10 @@ class CefExtensionWebContentsObserver
  public:
   ~CefExtensionWebContentsObserver() override;
 
+  // Creates and initializes an instance of this class for the given
+  // |web_contents|, if it doesn't already exist.
+  static void CreateForWebContents(content::WebContents* web_contents);
+
   ScriptExecutor* script_executor() { return script_executor_.get(); }
 
  private:
@@ -31,10 +34,6 @@ class CefExtensionWebContentsObserver
 
   // content::WebContentsObserver overrides.
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-
-  // Our content script observers. Declare at top so that it will outlive all
-  // other members, since they might add themselves as observers.
-  base::ObserverList<ScriptExecutionObserver> script_execution_observers_;
 
   std::unique_ptr<ScriptExecutor> script_executor_;
 

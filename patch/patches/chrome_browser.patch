@@ -1,5 +1,5 @@
 diff --git chrome/browser/BUILD.gn chrome/browser/BUILD.gn
-index ac49d3b83913..69696c72d0f3 100644
+index 649cf1469a44..c440c5588875 100644
 --- chrome/browser/BUILD.gn
 +++ chrome/browser/BUILD.gn
 @@ -8,6 +8,7 @@ import("//build/config/features.gni")
@@ -9,8 +9,8 @@ index ac49d3b83913..69696c72d0f3 100644
 +import("//cef/libcef/features/features.gni")
  import("//chrome/common/features.gni")
  import("//components/feature_engagement/features.gni")
- import("//components/nacl/features.gni")
-@@ -1591,6 +1592,7 @@ jumbo_split_static_library("browser") {
+ import("//components/feed/features.gni")
+@@ -1715,6 +1716,7 @@ jumbo_split_static_library("browser") {
      "//base:i18n",
      "//base/allocator:buildflags",
      "//cc",
@@ -18,9 +18,9 @@ index ac49d3b83913..69696c72d0f3 100644
      "//chrome:extra_resources",
      "//chrome:resources",
      "//chrome:strings",
-@@ -1845,6 +1847,10 @@ jumbo_split_static_library("browser") {
-     "//ui/web_dialogs",
-   ]
+@@ -1992,6 +1994,10 @@ jumbo_split_static_library("browser") {
+     ]
+   }
  
 +  if (enable_cef) {
 +    configs += [ "//cef/libcef/features:config" ]
@@ -29,3 +29,12 @@ index ac49d3b83913..69696c72d0f3 100644
    if (is_android) {
      sources += [
        "after_startup_task_utils_android.cc",
+@@ -3602,7 +3608,7 @@ jumbo_split_static_library("browser") {
+     ]
+   }
+ 
+-  if (use_aura && !use_ozone && is_desktop_linux) {
++  if (use_aura && !use_ozone && is_desktop_linux && use_gtk) {
+     deps += [ "//chrome/browser/ui/libgtkui" ]
+   }
+ 

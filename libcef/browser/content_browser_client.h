@@ -51,7 +51,9 @@ class CefContentBrowserClient : public content::ContentBrowserClient {
   bool IsHandledURL(const GURL& url) override;
   void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
   void SiteInstanceDeleting(content::SiteInstance* site_instance) override;
-  void RegisterInProcessServices(StaticServiceMap* services) override;
+  void RegisterInProcessServices(
+      StaticServiceMap* services,
+      content::ServiceManagerConnection* connection) override;
   void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
       base::StringPiece name) override;
@@ -60,6 +62,8 @@ class CefContentBrowserClient : public content::ContentBrowserClient {
                             content::BrowserContext* context2) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
+  bool ShouldEnableStrictSiteIsolation() override;
+  std::string GetApplicationLocale() override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void GetQuotaSettings(
       content::BrowserContext* context,
@@ -68,6 +72,8 @@ class CefContentBrowserClient : public content::ContentBrowserClient {
   content::MediaObserver* GetMediaObserver() override;
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
+  content::GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
+      content::BrowserContext* context) override;
   void AllowCertificateError(
       content::WebContents* web_contents,
       int cert_error,
@@ -127,6 +133,30 @@ class CefContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
       content::ResourceContext* resource_context) override;
 
+  void RegisterNonNetworkNavigationURLLoaderFactories(
+      int frame_tree_node_id,
+      NonNetworkURLLoaderFactoryMap* factories) override;
+  void RegisterNonNetworkSubresourceURLLoaderFactories(
+      int render_process_id,
+      int render_frame_id,
+      NonNetworkURLLoaderFactoryMap* factories) override;
+  bool WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame,
+      bool is_navigation,
+      const url::Origin& request_initiator,
+      network::mojom::URLLoaderFactoryRequest* factory_request,
+      bool* bypass_redirect_checks) override;
+
+  bool HandleExternalProtocol(
+      const GURL& url,
+      content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      int child_id,
+      content::NavigationUIData* navigation_data,
+      bool is_main_frame,
+      ui::PageTransition page_transition,
+      bool has_user_gesture) override;
+
   // Perform browser process registration for the custom scheme.
   void RegisterCustomScheme(const std::string& scheme);
 
@@ -141,6 +171,11 @@ class CefContentBrowserClient : public content::ContentBrowserClient {
   // Returns the extension or app associated with |site_instance| or NULL.
   const extensions::Extension* GetExtension(
       content::SiteInstance* site_instance);
+
+  static void HandleExternalProtocolOnUIThread(
+      const GURL& url,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter);
 
   CefBrowserMainParts* browser_main_parts_;
 

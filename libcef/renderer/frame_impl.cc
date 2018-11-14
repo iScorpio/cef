@@ -6,38 +6,44 @@
 
 #include "base/compiler_specific.h"
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic error "-Wdeprecated-declarations"
+#else
 #pragma warning(push)
 #pragma warning(default : 4996)
+#endif
 #endif
 
 #include "libcef/common/cef_messages.h"
 #include "libcef/common/net/http_header_utils.h"
 #include "libcef/common/request_impl.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/browser_impl.h"
 #include "libcef/renderer/dom_document_impl.h"
 #include "libcef/renderer/render_frame_util.h"
 #include "libcef/renderer/thread_util.h"
 #include "libcef/renderer/v8_impl.h"
-#include "libcef/renderer/webkit_glue.h"
 
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrameContentDumper.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_frame_content_dumper.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_view.h"
 
 using blink::WebString;
 
-CefFrameImpl::CefFrameImpl(CefBrowserImpl* browser, blink::WebLocalFrame* frame)
-    : browser_(browser),
-      frame_(frame),
-      frame_id_(render_frame_util::GetIdentifier(frame)) {}
+CefFrameImpl::CefFrameImpl(CefBrowserImpl* browser,
+                           blink::WebLocalFrame* frame,
+                           int64_t frame_id)
+    : browser_(browser), frame_(frame), frame_id_(frame_id) {}
 
 CefFrameImpl::~CefFrameImpl() {}
 
@@ -92,7 +98,7 @@ void CefFrameImpl::GetText(CefRefPtr<CefStringVisitor> visitor) {
   CEF_REQUIRE_RT_RETURN_VOID();
 
   if (frame_) {
-    const CefString& content = webkit_glue::DumpDocumentText(frame_);
+    const CefString& content = blink_glue::DumpDocumentText(frame_);
     visitor->Visit(content);
   }
 }
@@ -216,6 +222,13 @@ CefString CefFrameImpl::GetURL() {
 
   if (frame_) {
     GURL gurl = frame_->GetDocument().Url();
+    if (gurl.is_empty()) {
+      // For popups the main document URL will be empty during loading. Return
+      // the provisional document URL instead.
+      blink::WebDocumentLoader* loader = frame_->GetProvisionalDocumentLoader();
+      if (loader)
+        gurl = loader->GetRequest().Url();
+    }
     url = gurl.spec();
   }
   return url;
@@ -269,7 +282,11 @@ void CefFrameImpl::ExecuteCommand(const std::string& command) {
     frame_->ExecuteCommand(WebString::FromUTF8(command));
 }
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic pop
+#else
 #pragma warning(pop)
+#endif
 #endif

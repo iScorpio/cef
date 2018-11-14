@@ -26,7 +26,7 @@ const char kNetWMPing[] = "_NET_WM_PING";
 const char kNetWMState[] = "_NET_WM_STATE";
 const char kXdndProxy[] = "XdndProxy";
 
-::Window FindEventTarget(const base::NativeEvent& xev) {
+::Window FindEventTarget(const ui::PlatformEvent& xev) {
   ::Window target = xev->xany.window;
   if (xev->type == GenericEvent)
     target = static_cast<XIDeviceEvent*>(xev->xcookie.data)->event;
@@ -104,6 +104,7 @@ CefWindowX11::CefWindowX11(CefRefPtr<CefBrowserHostImpl> browser,
                            InputOutput,
                            CopyFromParent,  // visual
                            CWBackPixmap | CWOverrideRedirect, &swa);
+  CHECK(xwindow_);
 
   if (ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
@@ -394,4 +395,35 @@ void CefWindowX11::ContinueFocus() {
   if (browser_.get())
     browser_->SetFocus(true);
   focus_pending_ = false;
+}
+
+bool CefWindowX11::TopLevelAlwaysOnTop() const {
+  ::Window toplevel_window = FindToplevelParent(xdisplay_, xwindow_);
+
+  Atom state_atom = gfx::GetAtom("_NET_WM_STATE");
+  Atom state_keep_above = gfx::GetAtom("_NET_WM_STATE_KEEP_ABOVE");
+  Atom* states;
+
+  Atom actual_type;
+  int actual_format;
+  unsigned long num_items;
+  unsigned long bytes_after;
+
+  XGetWindowProperty(xdisplay_, toplevel_window, state_atom, 0, 1024,
+                     x11::False, XA_ATOM, &actual_type, &actual_format,
+                     &num_items, &bytes_after,
+                     reinterpret_cast<unsigned char**>(&states));
+
+  bool always_on_top = false;
+
+  for (unsigned long i = 0; i < num_items; ++i) {
+    if (states[i] == state_keep_above) {
+      always_on_top = true;
+      break;
+    }
+  }
+
+  XFree(states);
+
+  return always_on_top;
 }

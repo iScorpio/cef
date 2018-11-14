@@ -121,6 +121,10 @@ void CefBrowserPlatformDelegate::Invalidate(cef_paint_element_type_t type) {
   NOTREACHED();
 }
 
+void CefBrowserPlatformDelegate::SendExternalBeginFrame() {
+  NOTREACHED();
+}
+
 void CefBrowserPlatformDelegate::SetWindowlessFrameRate(int frame_rate) {
   NOTREACHED();
 }
@@ -196,7 +200,7 @@ void CefBrowserPlatformDelegate::DragSourceSystemDragEnded() {
 }
 
 void CefBrowserPlatformDelegate::AccessibilityEventReceived(
-    const std::vector<content::AXEventNotificationDetails>& eventData) {
+    const content::AXEventNotificationDetails& eventData) {
   NOTREACHED();
 }
 

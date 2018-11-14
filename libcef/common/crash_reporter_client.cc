@@ -18,6 +18,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/crash/core/common/crash_key.h"
+#include "services/service_manager/embedder/switches.h"
 #include "third_party/crashpad/crashpad/client/annotation.h"
 
 #if defined(OS_MACOSX)
@@ -84,7 +85,7 @@ PathString GetCrashConfigPath() {
 
   if (config_path.empty()) {
     // Start with the path to the running executable.
-    if (!PathService::Get(base::DIR_EXE, &config_path))
+    if (!base::PathService::Get(base::DIR_EXE, &config_path))
       return PathString();
   }
 
@@ -556,7 +557,7 @@ void CefCrashReporterClient::InitializeCrashReportingForProcess() {
     if (embedded_handler) {
       crash_reporter::InitializeCrashpadWithEmbeddedHandler(
           process_type.empty(), install_static::UTF16ToUTF8(process_type),
-          std::string());
+          std::string(), base::FilePath());
     } else {
       crash_reporter::InitializeCrashpad(
           process_type.empty(), install_static::UTF16ToUTF8(process_type));
@@ -607,6 +608,13 @@ void CefCrashReporterClient::GetProductNameAndVersion(const char** product_name,
   *version = product_version_.c_str();
 }
 
+void CefCrashReporterClient::GetProductNameAndVersion(std::string* product_name,
+                                                      std::string* version,
+                                                      std::string* channel) {
+  *product_name = product_name_;
+  *version = product_version_;
+}
+
 #if !defined(OS_MACOSX)
 
 base::FilePath CefCrashReporterClient::GetReporterLogFilename() {
@@ -617,7 +625,7 @@ bool CefCrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {
   return process_type == switches::kRendererProcess ||
          process_type == switches::kPpapiPluginProcess ||
-         process_type == switches::kZygoteProcess ||
+         process_type == service_manager::switches::kZygoteProcess ||
          process_type == switches::kGpuProcess;
 }
 
@@ -631,9 +639,9 @@ bool CefCrashReporterClient::GetCrashDumpLocation(base::FilePath* crash_dir) {
   if (env->GetVar("BREAKPAD_DUMP_LOCATION", &alternate_crash_dump_location)) {
     base::FilePath crash_dumps_dir_path =
         base::FilePath::FromUTF8Unsafe(alternate_crash_dump_location);
-    PathService::Override(chrome::DIR_CRASH_DUMPS, crash_dumps_dir_path);
+    base::PathService::Override(chrome::DIR_CRASH_DUMPS, crash_dumps_dir_path);
   }
-  return PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
+  return base::PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
 }
 
 #endif  // !defined(OS_POSIX)

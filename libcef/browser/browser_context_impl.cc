@@ -34,13 +34,14 @@
 #include "components/visitedlink/browser/visitedlink_event_listener.h"
 #include "components/visitedlink/browser/visitedlink_master.h"
 #include "components/zoom/zoom_event_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/common/constants.h"
 #include "net/proxy_resolution/proxy_config_service.h"
-#include "net/proxy_resolution/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 
 using content::BrowserThread;
 
@@ -176,11 +177,11 @@ class CefVisitedLinkListener : public visitedlink::VisitedLinkMaster::Listener {
 
   // visitedlink::VisitedLinkMaster::Listener methods.
 
-  void NewTable(mojo::SharedBufferHandle table) override {
+  void NewTable(base::ReadOnlySharedMemoryRegion* table_region) override {
     CEF_REQUIRE_UIT();
     ListenerMap::iterator it = listener_map_.begin();
     for (; it != listener_map_.end(); ++it)
-      it->second->NewTable(table);
+      it->second->NewTable(table_region);
   }
 
   void Add(visitedlink::VisitedLinkCommon::Fingerprint fingerprint) override {
@@ -284,7 +285,8 @@ void CefBrowserContextImpl::Initialize() {
 
   // Initialize proxy configuration tracker.
   pref_proxy_config_tracker_.reset(new PrefProxyConfigTrackerImpl(
-      GetPrefs(), BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+      GetPrefs(),
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO})));
 
   CefBrowserContext::PostInitialize();
 
@@ -418,7 +420,8 @@ CefBrowserContextImpl::GetSSLHostStateDelegate() {
   return ssl_host_state_delegate_.get();
 }
 
-content::PermissionManager* CefBrowserContextImpl::GetPermissionManager() {
+content::PermissionControllerDelegate*
+CefBrowserContextImpl::GetPermissionControllerDelegate() {
   return nullptr;
 }
 
@@ -444,7 +447,7 @@ net::URLRequestContextGetter* CefBrowserContextImpl::CreateRequestContext(
   DCHECK(!url_request_getter_.get());
 
   auto io_thread_runner =
-      content::BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO});
 
   // Initialize the proxy configuration service.
   // TODO(cef): Determine if we can use the Chrome/Mojo implementation from
@@ -462,10 +465,8 @@ net::URLRequestContextGetter* CefBrowserContextImpl::CreateRequestContext(
     // data in its installation directory).
     extensions::InfoMap* extension_info_map = extension_system()->info_map();
     (*protocol_handlers)[extensions::kExtensionScheme] =
-        linked_ptr<net::URLRequestJobFactory::ProtocolHandler>(
-            extensions::CreateExtensionProtocolHandler(IsOffTheRecord(),
-                                                       extension_info_map)
-                .release());
+        extensions::CreateExtensionProtocolHandler(IsOffTheRecord(),
+                                                   extension_info_map);
   }
 
   url_request_getter_ = new CefURLRequestContextGetterImpl(
@@ -520,7 +521,7 @@ HostContentSettingsMap* CefBrowserContextImpl::GetHostContentSettingsMap() {
     // that can be stored in the settings map (for example, default values set
     // via DefaultProvider::SetWebsiteSetting).
     host_content_settings_map_ =
-        new HostContentSettingsMap(GetPrefs(), false, false, false);
+        new HostContentSettingsMap(GetPrefs(), false, false, false, false);
 
     // Change the default plugin policy.
     const base::CommandLine* command_line =

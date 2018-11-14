@@ -4,12 +4,12 @@
 
 #include "libcef/browser/net/cookie_store_proxy.h"
 
-#include "libcef/browser/cookie_manager_impl.h"
-#include "libcef/browser/net/url_request_context_impl.h"
+#include "include/cef_request_context.h"
+#include "libcef/browser/net/cookie_store_source.h"
 #include "libcef/browser/thread_util.h"
 
 #include "base/logging.h"
-#include "net/url_request/url_request_context.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 
 namespace {
 
@@ -22,12 +22,18 @@ class NullCookieChangeDispatcher : public net::CookieChangeDispatcher {
   std::unique_ptr<net::CookieChangeSubscription> AddCallbackForCookie(
       const GURL& url,
       const std::string& name,
-      net::CookieChangeCallback callback) override WARN_UNUSED_RESULT {
+      net::CookieChangeCallback callback) override {
+    return nullptr;
+  }
+
+  std::unique_ptr<net::CookieChangeSubscription> AddCallbackForUrl(
+      const GURL& url,
+      net::CookieChangeCallback callback) override {
     return nullptr;
   }
 
   std::unique_ptr<net::CookieChangeSubscription> AddCallbackForAllChanges(
-      net::CookieChangeCallback callback) override WARN_UNUSED_RESULT {
+      net::CookieChangeCallback callback) override {
     return nullptr;
   }
 
@@ -38,12 +44,10 @@ class NullCookieChangeDispatcher : public net::CookieChangeDispatcher {
 }  // namespace
 
 CefCookieStoreProxy::CefCookieStoreProxy(
-    CefURLRequestContextImpl* parent,
-    CefRefPtr<CefRequestContextHandler> handler)
-    : parent_(parent), handler_(handler) {
+    std::unique_ptr<CefCookieStoreSource> source)
+    : source_(std::move(source)) {
   CEF_REQUIRE_IOT();
-  DCHECK(parent_);
-  DCHECK(handler_.get());
+  DCHECK(source_);
 }
 
 CefCookieStoreProxy::~CefCookieStoreProxy() {
@@ -123,28 +127,24 @@ void CefCookieStoreProxy::DeleteCanonicalCookieAsync(
   }
 }
 
-void CefCookieStoreProxy::DeleteAllCreatedBetweenAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
+void CefCookieStoreProxy::DeleteAllCreatedInTimeRangeAsync(
+    const net::CookieDeletionInfo::TimeRange& creation_range,
     DeleteCallback callback) {
   net::CookieStore* cookie_store = GetCookieStore();
   if (cookie_store) {
-    cookie_store->DeleteAllCreatedBetweenAsync(delete_begin, delete_end,
-                                               std::move(callback));
+    cookie_store->DeleteAllCreatedInTimeRangeAsync(creation_range,
+                                                   std::move(callback));
   } else if (!callback.is_null()) {
     std::move(callback).Run(0);
   }
 }
 
-void CefCookieStoreProxy::DeleteAllCreatedBetweenWithPredicateAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
-    const CookiePredicate& predicate,
+void CefCookieStoreProxy::DeleteAllMatchingInfoAsync(
+    net::CookieDeletionInfo delete_info,
     DeleteCallback callback) {
   net::CookieStore* cookie_store = GetCookieStore();
   if (cookie_store) {
-    cookie_store->DeleteAllCreatedBetweenWithPredicateAsync(
-        delete_begin, delete_end, predicate, std::move(callback));
+    cookie_store->DeleteAllMatchingInfoAsync(delete_info, std::move(callback));
   } else if (!callback.is_null()) {
     std::move(callback).Run(0);
   }
@@ -187,24 +187,5 @@ bool CefCookieStoreProxy::IsEphemeral() {
 
 net::CookieStore* CefCookieStoreProxy::GetCookieStore() {
   CEF_REQUIRE_IOT();
-
-  CefRefPtr<CefCookieManager> manager = handler_->GetCookieManager();
-  if (manager.get()) {
-    // Use the cookie store provided by the manager. May be nullptr if the
-    // cookie manager is blocking.
-    return reinterpret_cast<CefCookieManagerImpl*>(manager.get())
-        ->GetExistingCookieStore();
-  }
-
-  DCHECK(parent_);
-  if (parent_) {
-    // Use the cookie store from the parent.
-    net::CookieStore* cookie_store = parent_->cookie_store();
-    DCHECK(cookie_store);
-    if (!cookie_store)
-      LOG(ERROR) << "Cookie store does not exist";
-    return cookie_store;
-  }
-
-  return nullptr;
+  return source_->GetCookieStore();
 }

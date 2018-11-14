@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=9e2bcb61512095fba2fca928f4696fbb39d9d3b1$
+// $hash=2f19b04733f565830f873853695e9163086a8ee0$
 //
 
 #ifndef CEF_LIBCEF_DLL_CTOCPP_RENDER_HANDLER_CTOCPP_H_
@@ -36,7 +36,7 @@ class CefRenderHandlerCToCpp
   // CefRenderHandler methods.
   CefRefPtr<CefAccessibilityHandler> GetAccessibilityHandler() override;
   bool GetRootScreenRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override;
-  bool GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override;
+  void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override;
   bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
                       int viewX,
                       int viewY,
@@ -52,6 +52,10 @@ class CefRenderHandlerCToCpp
                const void* buffer,
                int width,
                int height) override;
+  void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
+                          PaintElementType type,
+                          const RectList& dirtyRects,
+                          void* shared_handle) override;
   void OnCursorChange(CefRefPtr<CefBrowser> browser,
                       CefCursorHandle cursor,
                       CursorType type,

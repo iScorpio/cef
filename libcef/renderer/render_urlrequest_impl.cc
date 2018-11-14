@@ -9,21 +9,21 @@
 #include "libcef/common/request_impl.h"
 #include "libcef/common/response_impl.h"
 #include "libcef/common/task_runner_impl.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/content_renderer_client.h"
-#include "libcef/renderer/webkit_glue.h"
 
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLLoader.h"
-#include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
-#include "third_party/WebKit/public/platform/WebURLLoaderFactory.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_loader.h"
+#include "third_party/blink/public/platform/web_url_loader_client.h"
+#include "third_party/blink/public/platform/web_url_loader_factory.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 
-using blink::WebReferrerPolicy;
 using blink::WebString;
 using blink::WebURL;
 using blink::WebURLError;
@@ -44,11 +44,13 @@ class CefWebURLLoaderClient : public blink::WebURLLoaderClient {
                    unsigned long long totalBytesToBeSent) override;
   void DidReceiveResponse(const WebURLResponse& response) override;
   void DidReceiveData(const char* data, int dataLength) override;
-  void DidFinishLoading(double finish_time,
-                        int64_t total_encoded_data_length,
-                        int64_t total_encoded_body_length,
-                        int64_t total_decoded_body_length,
-                        bool blocked_cross_site_document) override;
+  void DidFinishLoading(
+      base::TimeTicks finish_time,
+      int64_t total_encoded_data_length,
+      int64_t total_encoded_body_length,
+      int64_t total_decoded_body_length,
+      bool should_report_corb_blocking,
+      const std::vector<network::cors::PreflightTimingInfo>&) override;
   void DidFail(const WebURLError&,
                int64_t total_encoded_data_length,
                int64_t total_encoded_body_length,
@@ -56,7 +58,7 @@ class CefWebURLLoaderClient : public blink::WebURLLoaderClient {
   bool WillFollowRedirect(const WebURL& new_url,
                           const WebURL& new_site_for_cookies,
                           const WebString& new_referrer,
-                          WebReferrerPolicy new_referrer_policy,
+                          network::mojom::ReferrerPolicy new_referrer_policy,
                           const WebString& new_method,
                           const WebURLResponse& passed_redirect_response,
                           bool& report_raw_headers) override;
@@ -116,7 +118,8 @@ class CefRenderURLRequest::Context
 
     loader_ =
         CefContentRendererClient::Get()->url_loader_factory()->CreateURLLoader(
-            urlRequest, task_runner_.get());
+            urlRequest, blink::scheduler::WebResourceLoadingTaskRunnerHandle::
+                            CreateUnprioritized(task_runner_.get()));
     loader_->LoadAsynchronously(urlRequest, url_client_.get());
     return true;
   }
@@ -139,7 +142,7 @@ class CefRenderURLRequest::Context
                       const WebURLResponse& response) {
     DCHECK(CalledOnValidThread());
 
-    response_was_cached_ = webkit_glue::ResponseWasCached(response);
+    response_was_cached_ = blink_glue::ResponseWasCached(response);
     response_ = CefResponse::Create();
     CefResponseImpl* responseImpl =
         static_cast<CefResponseImpl*>(response_.get());
@@ -160,7 +163,7 @@ class CefRenderURLRequest::Context
   void OnResponse(const WebURLResponse& response) {
     DCHECK(CalledOnValidThread());
 
-    response_was_cached_ = webkit_glue::ResponseWasCached(response);
+    response_was_cached_ = blink_glue::ResponseWasCached(response);
     response_ = CefResponse::Create();
     CefResponseImpl* responseImpl =
         static_cast<CefResponseImpl*>(response_.get());
@@ -292,11 +295,13 @@ void CefWebURLLoaderClient::DidReceiveData(const char* data, int dataLength) {
     context_->OnDownloadData(data, dataLength);
 }
 
-void CefWebURLLoaderClient::DidFinishLoading(double finishTime,
-                                             int64_t total_encoded_data_length,
-                                             int64_t total_encoded_body_length,
-                                             int64_t total_decoded_body_length,
-                                             bool blocked_cross_site_document) {
+void CefWebURLLoaderClient::DidFinishLoading(
+    base::TimeTicks finish_time,
+    int64_t total_encoded_data_length,
+    int64_t total_encoded_body_length,
+    int64_t total_decoded_body_length,
+    bool should_report_corb_blocking,
+    const std::vector<network::cors::PreflightTimingInfo>&) {
   context_->OnComplete();
 }
 
@@ -311,7 +316,7 @@ bool CefWebURLLoaderClient::WillFollowRedirect(
     const WebURL& new_url,
     const WebURL& new_site_for_cookies,
     const WebString& new_referrer,
-    WebReferrerPolicy new_referrer_policy,
+    network::mojom::ReferrerPolicy new_referrer_policy,
     const WebString& new_method,
     const WebURLResponse& passed_redirect_response,
     bool& report_raw_headers) {

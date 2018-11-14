@@ -35,6 +35,7 @@
 #include "content/public/common/pepper_plugin_info.h"
 #include "content/public/common/user_agent.h"
 #include "ppapi/shared_impl/ppapi_permissions.h"
+#include "third_party/widevine/cdm/buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_LINUX)
@@ -52,7 +53,7 @@ const char kPDFPluginExtension[] = "pdf";
 const char kPDFPluginDescription[] = "Portable Document Format";
 const char kPDFPluginOutOfProcessMimeType[] = "application/x-google-chrome-pdf";
 const uint32_t kPDFPluginPermissions =
-    ppapi::PERMISSION_PRIVATE | ppapi::PERMISSION_DEV;
+    ppapi::PERMISSION_PDF | ppapi::PERMISSION_DEV;
 
 content::PepperPluginInfo::GetInterfaceFunc g_pdf_get_interface;
 content::PepperPluginInfo::PPP_InitializeModuleFunc g_pdf_initialize_module;
@@ -150,8 +151,8 @@ bool GetSystemPepperFlash(content::PepperPluginInfo* plugin) {
     return false;
 
   base::FilePath flash_filename;
-  if (!PathService::Get(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
-                        &flash_filename)) {
+  if (!base::PathService::Get(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
+                              &flash_filename)) {
     return false;
   }
 
@@ -204,15 +205,19 @@ void CefContentClient::AddPepperPlugins(
   ComputeBuiltInPlugins(plugins);
   AddPepperFlashFromCommandLine(plugins);
 
-#if defined(OS_LINUX)
-#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  CefWidevineLoader::AddPepperPlugins(plugins);
-#endif
-#endif
-
   content::PepperPluginInfo plugin;
   if (GetSystemPepperFlash(&plugin))
     plugins->push_back(plugin);
+}
+
+void CefContentClient::AddContentDecryptionModules(
+    std::vector<content::CdmInfo>* cdms,
+    std::vector<media::CdmHostFilePath>* cdm_host_file_paths) {
+#if defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  CefWidevineLoader::AddContentDecryptionModules(cdms, cdm_host_file_paths);
+#endif
+#endif
 }
 
 void CefContentClient::AddAdditionalSchemes(Schemes* schemes) {

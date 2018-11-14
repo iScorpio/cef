@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=fbd234d6060aadc1bf5ee0efce5d8cb2c4a0e022$
+// $hash=f80504de9c152a491b0cff8ea6a48b57324c3a89$
 //
 
 #include "libcef_dll/ctocpp/request_handler_ctocpp.h"
@@ -27,9 +27,11 @@
 
 // VIRTUAL METHODS - Body may be edited by hand.
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                              CefRefPtr<CefFrame> frame,
                                              CefRefPtr<CefRequest> request,
+                                             bool user_gesture,
                                              bool is_redirect) {
   cef_request_handler_t* _struct = GetStruct();
   if (CEF_MEMBER_MISSING(_struct, on_before_browse))
@@ -53,12 +55,13 @@ bool CefRequestHandlerCToCpp::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
   // Execute
   int _retval = _struct->on_before_browse(
       _struct, CefBrowserCppToC::Wrap(browser), CefFrameCppToC::Wrap(frame),
-      CefRequestCppToC::Wrap(request), is_redirect);
+      CefRequestCppToC::Wrap(request), user_gesture, is_redirect);
 
   // Return type: bool
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnOpenURLFromTab(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -93,6 +96,7 @@ bool CefRequestHandlerCToCpp::OnOpenURLFromTab(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 CefRequestHandler::ReturnValue CefRequestHandlerCToCpp::OnBeforeResourceLoad(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -131,6 +135,7 @@ CefRequestHandler::ReturnValue CefRequestHandlerCToCpp::OnBeforeResourceLoad(
   return _retval;
 }
 
+NO_SANITIZE("cfi-icall")
 CefRefPtr<CefResourceHandler> CefRequestHandlerCToCpp::GetResourceHandler(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -163,6 +168,7 @@ CefRefPtr<CefResourceHandler> CefRequestHandlerCToCpp::GetResourceHandler(
   return CefResourceHandlerCToCpp::Wrap(_retval);
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnResourceRedirect(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -199,6 +205,7 @@ void CefRequestHandlerCToCpp::OnResourceRedirect(
       new_url.GetWritableStruct());
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnResourceResponse(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -236,6 +243,7 @@ bool CefRequestHandlerCToCpp::OnResourceResponse(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 CefRefPtr<CefResponseFilter> CefRequestHandlerCToCpp::GetResourceResponseFilter(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -273,6 +281,7 @@ CefRefPtr<CefResponseFilter> CefRequestHandlerCToCpp::GetResourceResponseFilter(
   return CefResponseFilterCToCpp::Wrap(_retval);
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnResourceLoadComplete(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -310,6 +319,7 @@ void CefRequestHandlerCToCpp::OnResourceLoadComplete(
       status, received_content_length);
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::GetAuthCredentials(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -353,6 +363,7 @@ bool CefRequestHandlerCToCpp::GetAuthCredentials(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::CanGetCookies(CefRefPtr<CefBrowser> browser,
                                             CefRefPtr<CefFrame> frame,
                                             CefRefPtr<CefRequest> request) {
@@ -384,6 +395,7 @@ bool CefRequestHandlerCToCpp::CanGetCookies(CefRefPtr<CefBrowser> browser,
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::CanSetCookie(CefRefPtr<CefBrowser> browser,
                                            CefRefPtr<CefFrame> frame,
                                            CefRefPtr<CefRequest> request,
@@ -416,6 +428,7 @@ bool CefRequestHandlerCToCpp::CanSetCookie(CefRefPtr<CefBrowser> browser,
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnQuotaRequest(
     CefRefPtr<CefBrowser> browser,
     const CefString& origin_url,
@@ -449,6 +462,7 @@ bool CefRequestHandlerCToCpp::OnQuotaRequest(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnProtocolExecution(CefRefPtr<CefBrowser> browser,
                                                   const CefString& url,
                                                   bool& allow_os_execution) {
@@ -478,6 +492,7 @@ void CefRequestHandlerCToCpp::OnProtocolExecution(CefRefPtr<CefBrowser> browser,
   allow_os_execution = allow_os_executionInt ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnCertificateError(
     CefRefPtr<CefBrowser> browser,
     cef_errorcode_t cert_error,
@@ -517,6 +532,7 @@ bool CefRequestHandlerCToCpp::OnCertificateError(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 bool CefRequestHandlerCToCpp::OnSelectClientCertificate(
     CefRefPtr<CefBrowser> browser,
     bool isProxy,
@@ -570,6 +586,7 @@ bool CefRequestHandlerCToCpp::OnSelectClientCertificate(
   return _retval ? true : false;
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnPluginCrashed(CefRefPtr<CefBrowser> browser,
                                               const CefString& plugin_path) {
   cef_request_handler_t* _struct = GetStruct();
@@ -592,6 +609,7 @@ void CefRequestHandlerCToCpp::OnPluginCrashed(CefRefPtr<CefBrowser> browser,
                              plugin_path.GetStruct());
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnRenderViewReady(CefRefPtr<CefBrowser> browser) {
   cef_request_handler_t* _struct = GetStruct();
   if (CEF_MEMBER_MISSING(_struct, on_render_view_ready))
@@ -608,6 +626,7 @@ void CefRequestHandlerCToCpp::OnRenderViewReady(CefRefPtr<CefBrowser> browser) {
   _struct->on_render_view_ready(_struct, CefBrowserCppToC::Wrap(browser));
 }
 
+NO_SANITIZE("cfi-icall")
 void CefRequestHandlerCToCpp::OnRenderProcessTerminated(
     CefRefPtr<CefBrowser> browser,
     TerminationStatus status) {

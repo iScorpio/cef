@@ -1,12 +1,11 @@
 diff --git chrome/browser/profiles/incognito_helpers.cc chrome/browser/profiles/incognito_helpers.cc
-index ce4f72b98a05..f7d57b854399 100644
+index a319237928b8..82945e3d625d 100644
 --- chrome/browser/profiles/incognito_helpers.cc
 +++ chrome/browser/profiles/incognito_helpers.cc
-@@ -7,19 +7,42 @@
- #include "chrome/browser/profiles/profile.h"
+@@ -8,20 +8,41 @@
  
  namespace chrome {
-+  
+ 
 +namespace {
 +BrowserContextIncognitoHelper* g_helper = nullptr;
 +}  // namespace
@@ -14,7 +13,7 @@ index ce4f72b98a05..f7d57b854399 100644
 +void SetBrowserContextIncognitoHelper(BrowserContextIncognitoHelper* helper) {
 +  g_helper = helper;
 +}
- 
++
  content::BrowserContext* GetBrowserContextRedirectedInIncognito(
      content::BrowserContext* context) {
 +  if (g_helper) {
@@ -24,14 +23,15 @@ index ce4f72b98a05..f7d57b854399 100644
 +      return new_context;
 +  }
 +
-   return static_cast<Profile*>(context)->GetOriginalProfile();
+   return Profile::FromBrowserContext(context)->GetOriginalProfile();
  }
  
  const content::BrowserContext* GetBrowserContextRedirectedInIncognito(
      const content::BrowserContext* context) {
--  return static_cast<const Profile*>(context)->GetOriginalProfile();
+-  const Profile* profile = Profile::FromBrowserContext(
 +  return GetBrowserContextRedirectedInIncognito(
-+      const_cast<content::BrowserContext*>(context));
+       const_cast<content::BrowserContext*>(context));
+-  return profile->GetOriginalProfile();
  }
  
  content::BrowserContext* GetBrowserContextOwnInstanceInIncognito(
@@ -71,10 +71,10 @@ index e8e76ce5b954..1dd338dd0142 100644
  content::BrowserContext* GetBrowserContextRedirectedInIncognito(
      content::BrowserContext* context);
 diff --git chrome/browser/profiles/profile_manager.cc chrome/browser/profiles/profile_manager.cc
-index 06cc4ca5c59c..a610360829d8 100644
+index 95adee5097f0..7afb65e78998 100644
 --- chrome/browser/profiles/profile_manager.cc
 +++ chrome/browser/profiles/profile_manager.cc
-@@ -377,7 +377,7 @@ ProfileManager::ProfileManager(const base::FilePath& user_data_dir)
+@@ -390,7 +390,7 @@ ProfileManager::ProfileManager(const base::FilePath& user_data_dir)
        chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
        content::NotificationService::AllSources());
  
@@ -84,7 +84,7 @@ index 06cc4ca5c59c..a610360829d8 100644
                                      this));
  }
 diff --git chrome/browser/profiles/profile_manager.h chrome/browser/profiles/profile_manager.h
-index 95d20f01a062..96834378f487 100644
+index 8a62433e9107..5ae35bc2d16a 100644
 --- chrome/browser/profiles/profile_manager.h
 +++ chrome/browser/profiles/profile_manager.h
 @@ -93,7 +93,7 @@ class ProfileManager : public content::NotificationObserver,
@@ -96,7 +96,7 @@ index 95d20f01a062..96834378f487 100644
  
    // Returns total number of profiles available on this machine.
    size_t GetNumberOfProfiles();
-@@ -124,7 +124,7 @@ class ProfileManager : public content::NotificationObserver,
+@@ -123,7 +123,7 @@ class ProfileManager : public content::NotificationObserver,
  
    // Returns true if the profile pointer is known to point to an existing
    // profile.
@@ -105,7 +105,7 @@ index 95d20f01a062..96834378f487 100644
  
    // Returns the directory where the first created profile is stored,
    // relative to the user data directory currently in use.
-@@ -133,7 +133,7 @@ class ProfileManager : public content::NotificationObserver,
+@@ -132,7 +132,7 @@ class ProfileManager : public content::NotificationObserver,
    // Get the Profile last used (the Profile to which owns the most recently
    // focused window) with this Chrome build. If no signed profile has been
    // stored in Local State, hand back the Default profile.

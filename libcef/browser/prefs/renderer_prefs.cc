@@ -36,7 +36,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 namespace renderer_prefs {
 
@@ -49,6 +49,8 @@ void SetDefaultPrefs(content::WebPreferences& web) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
 
+  web.javascript_enabled =
+      !command_line->HasSwitch(switches::kDisableJavascript);
   web.allow_scripts_to_close_windows =
       !command_line->HasSwitch(switches::kDisableJavascriptCloseWindows);
   web.javascript_can_access_clipboard =
@@ -301,14 +303,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kEnableDoNotTrack, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   // TODO(guoweis): Remove next 2 options at M50.
   registry->RegisterBooleanPref(prefs::kWebRTCMultipleRoutesEnabled, true);
   registry->RegisterBooleanPref(prefs::kWebRTCNonProxiedUdpEnabled, true);
   registry->RegisterStringPref(prefs::kWebRTCIPHandlingPolicy,
                                content::kWebRTCIPHandlingDefault);
   registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
-#endif
 
 #if !defined(OS_MACOSX)
   registry->RegisterBooleanPref(prefs::kFullscreenAllowed, true);

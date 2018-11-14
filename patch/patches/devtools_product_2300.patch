@@ -1,8 +1,8 @@
 diff --git content/browser/devtools/devtools_http_handler.cc content/browser/devtools/devtools_http_handler.cc
-index 1a93ba92a9e0..2c4b116d25ea 100644
+index 53a3e878241c..afcd9feb9d6b 100644
 --- content/browser/devtools/devtools_http_handler.cc
 +++ content/browser/devtools/devtools_http_handler.cc
-@@ -543,7 +543,7 @@ void DevToolsHttpHandler::OnJsonRequest(
+@@ -569,7 +569,7 @@ void DevToolsHttpHandler::OnJsonRequest(
      version.SetString("Protocol-Version",
                        DevToolsAgentHost::GetProtocolVersion());
      version.SetString("WebKit-Version", GetWebKitVersion());
@@ -12,10 +12,10 @@ index 1a93ba92a9e0..2c4b116d25ea 100644
      version.SetString("V8-Version", V8_VERSION_STRING);
      std::string host = info.headers["host"];
 diff --git content/public/common/content_client.h content/public/common/content_client.h
-index ea3c1ef6bb61..0c7d3199050f 100644
+index b939bc2a9edf..b37302c0d8cf 100644
 --- content/public/common/content_client.h
 +++ content/public/common/content_client.h
-@@ -145,6 +145,10 @@ class CONTENT_EXPORT ContentClient {
+@@ -151,6 +151,10 @@ class CONTENT_EXPORT ContentClient {
    // Used as part of the user agent string.
    virtual std::string GetProduct() const;
  
@@ -24,5 +24,5 @@ index ea3c1ef6bb61..0c7d3199050f 100644
 +  virtual std::string GetChromeProduct() const { return GetProduct(); }
 +
    // Returns the user agent.  Content may cache this value.
+   // TODO(yhirano): Move this to ContentBrowserClient.
    virtual std::string GetUserAgent() const;
- 

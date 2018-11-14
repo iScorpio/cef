@@ -16,7 +16,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 class ChromeProfileManagerStub;
 
@@ -49,11 +49,14 @@ class ChromeBrowserProcessStub : public BrowserProcess,
   rappor::RapporServiceImpl* rappor_service() override;
   IOThread* io_thread() override;
   SystemNetworkContextManager* system_network_context_manager() override;
-  content::NetworkConnectionTracker* network_connection_tracker() override;
+  net_log::NetExportFileWriter* net_export_file_writer() override;
+  network::NetworkQualityTracker* network_quality_tracker() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
   net::URLRequestContextGetter* system_request_context() override;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
+      override;
   variations::VariationsService* variations_service() override;
   BrowserProcessPlatformPart* platform_part() override;
   extensions::EventRouterForwarder* extension_event_router_forwarder() override;
@@ -96,15 +99,12 @@ class ChromeBrowserProcessStub : public BrowserProcess,
   component_updater::SupervisedUserWhitelistInstaller*
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
-#if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;
-#endif
   network_time::NetworkTimeTracker* network_time_tracker() override;
   gcm::GCMDriver* gcm_driver() override;
   shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
   resource_coordinator::TabManager* GetTabManager() override;
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
   prefs::InProcessPrefServiceFactory* pref_service_factory() const override;
 
   // BrowserContextIncognitoHelper implementation.
@@ -123,6 +123,7 @@ class ChromeBrowserProcessStub : public BrowserProcess,
   std::unique_ptr<ChromeProfileManagerStub> profile_manager_;
   scoped_refptr<extensions::EventRouterForwarder> event_router_forwarder_;
   std::unique_ptr<net_log::ChromeNetLog> net_log_;
+  std::unique_ptr<net_log::NetExportFileWriter> net_export_file_writer_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserProcessStub);
 };

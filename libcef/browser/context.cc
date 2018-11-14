@@ -7,7 +7,6 @@
 #include "libcef/browser/browser_info.h"
 #include "libcef/browser/browser_info_manager.h"
 #include "libcef/browser/browser_main.h"
-#include "libcef/browser/browser_message_loop.h"
 #include "libcef/browser/chrome_browser_process_stub.h"
 #include "libcef/browser/thread_util.h"
 #include "libcef/browser/trace_subscriber.h"
@@ -21,6 +20,7 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/files/file_util.h"
+#include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/app/content_service_manager_main_delegate.h"
@@ -29,10 +29,12 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "services/service_manager/embedder/main.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_WIN)
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/install_static/initialize_from_primary_module.h"
 #include "chrome_elf/chrome_elf_main.h"
 #include "components/crash/content/app/crashpad.h"
 #include "content/public/app/sandbox_helper_win.h"
@@ -70,6 +72,16 @@ void DisableFMA3() {
   _set_FMA3_enable(0);
 }
 #endif  // defined(ARCH_CPU_X86_64)
+
+// Transfer state from chrome_elf.dll to the libcef.dll. Accessed when
+// loading chrome://system.
+void InitInstallDetails() {
+  static bool initialized = false;
+  if (initialized)
+    return;
+  initialized = true;
+  install_static::InitializeFromPrimaryModule();
+}
 
 // Signal chrome_elf to initialize crash reporting, rather than doing it in
 // DllMain. See https://crbug.com/656800 for details.
@@ -156,6 +168,7 @@ int CefExecuteProcess(const CefMainArgs& args,
 #if defined(ARCH_CPU_X86_64)
   DisableFMA3();
 #endif
+  InitInstallDetails();
   InitCrashReporter();
 #endif
 
@@ -215,6 +228,7 @@ bool CefInitialize(const CefMainArgs& args,
 #if defined(ARCH_CPU_X86_64)
   DisableFMA3();
 #endif
+  InitInstallDetails();
   InitCrashReporter();
 #endif
 
@@ -271,7 +285,8 @@ void CefDoMessageLoopWork() {
     return;
   }
 
-  CefBrowserMessageLoop::current()->DoMessageLoopIteration();
+  base::RunLoop run_loop;
+  run_loop.RunUntilIdle();
 }
 
 void CefRunMessageLoop() {
@@ -287,7 +302,8 @@ void CefRunMessageLoop() {
     return;
   }
 
-  CefBrowserMessageLoop::current()->RunMessageLoop();
+  base::RunLoop run_loop;
+  run_loop.Run();
 }
 
 void CefQuitMessageLoop() {
@@ -316,7 +332,7 @@ void CefSetOSModalLoop(bool osModalLoop) {
   }
 
   if (CEF_CURRENTLY_ON_UIT())
-    base::MessageLoop::current()->set_os_modal_loop(osModalLoop);
+    base::MessageLoopCurrent::Get()->set_os_modal_loop(osModalLoop);
   else
     CEF_POST_TASK(CEF_UIT, base::Bind(CefSetOSModalLoop, osModalLoop));
 #endif  // defined(OS_WIN)
@@ -341,7 +357,7 @@ bool CefContext::Initialize(const CefMainArgs& args,
   init_thread_id_ = base::PlatformThread::CurrentId();
   settings_ = settings;
 
-#if !defined(OS_WIN)
+#if !(defined(OS_WIN) || defined(OS_LINUX))
   if (settings.multi_threaded_message_loop) {
     NOTIMPLEMENTED() << "multi_threaded_message_loop is not supported.";
     return false;
@@ -499,7 +515,7 @@ void CefContext::OnContextInitialized() {
   static_cast<ChromeBrowserProcessStub*>(g_browser_process)
       ->OnContextInitialized();
 
-#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
   CefWidevineLoader::GetInstance()->OnContextInitialized();
 #endif
 
@@ -523,6 +539,8 @@ void CefContext::FinishShutdownOnUIThread(
     trace_subscriber_.reset(NULL);
 
   static_cast<ChromeBrowserProcessStub*>(g_browser_process)->Shutdown();
+
+  ui::ResourceBundle::GetSharedInstance().CleanupOnUIThread();
 
   if (uithread_shutdown_event)
     uithread_shutdown_event->Signal();

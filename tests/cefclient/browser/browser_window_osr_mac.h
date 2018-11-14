@@ -23,7 +23,7 @@ class BrowserWindowOsrMac : public BrowserWindow,
   // |delegate| must outlive this object.
   BrowserWindowOsrMac(BrowserWindow::Delegate* delegate,
                       const std::string& startup_url,
-                      const OsrRenderer::Settings& settings);
+                      const OsrRendererSettings& settings);
   ~BrowserWindowOsrMac();
 
   // BrowserWindow methods.
@@ -52,7 +52,7 @@ class BrowserWindowOsrMac : public BrowserWindow,
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) OVERRIDE;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) OVERRIDE;
   bool GetRootScreenRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
-  bool GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
+  void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) OVERRIDE;
   bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
                       int viewX,
                       int viewY,

@@ -9,10 +9,15 @@
 
 #include "base/compiler_specific.h"
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic error "-Wdeprecated-declarations"
+#else
 #pragma warning(push)
 #pragma warning(default : 4996)
+#endif
 #endif
 
 #include "libcef/browser/context.h"
@@ -23,6 +28,7 @@
 #include "libcef/common/extensions/extensions_util.h"
 #include "libcef/common/request_impl.h"
 #include "libcef/common/values_impl.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/browser_impl.h"
 #include "libcef/renderer/extensions/extensions_renderer_client.h"
 #include "libcef/renderer/extensions/print_render_frame_helper_delegate.h"
@@ -31,7 +37,6 @@
 #include "libcef/renderer/render_thread_observer.h"
 #include "libcef/renderer/thread_util.h"
 #include "libcef/renderer/v8_impl.h"
-#include "libcef/renderer/webkit_glue.h"
 
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -41,6 +46,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/constants.mojom.h"
@@ -60,6 +66,7 @@
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/child/child_thread.h"
@@ -78,21 +85,21 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "third_party/WebKit/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebPrerenderingSupport.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer_process_type.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPrerendererClient.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/renderer_process_type.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_prerendering_support.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_prerenderer_client.h"
+#include "third_party/blink/public/web/web_security_policy.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_MACOSX)
@@ -258,11 +265,11 @@ void CefContentRendererClient::WebKitInitialized() {
       const blink::WebString& scheme =
           blink::WebString::FromUTF8(info.scheme_name);
       if (info.is_local)
-        webkit_glue::RegisterURLSchemeAsLocal(scheme);
+        blink_glue::RegisterURLSchemeAsLocal(scheme);
       if (info.is_display_isolated)
         blink::WebSecurityPolicy::RegisterURLSchemeAsDisplayIsolated(scheme);
       if (info.is_secure)
-        webkit_glue::RegisterURLSchemeAsSecure(scheme);
+        blink_glue::RegisterURLSchemeAsSecure(scheme);
     }
   }
 
@@ -272,10 +279,11 @@ void CefContentRendererClient::WebKitInitialized() {
       const Cef_CrossOriginWhiteListEntry_Params& entry =
           cross_origin_whitelist_entries_[i];
       GURL gurl = GURL(entry.source_origin);
-      blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+      blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
           gurl, blink::WebString::FromUTF8(entry.target_protocol),
           blink::WebString::FromUTF8(entry.target_domain),
-          entry.allow_target_subdomains);
+          entry.allow_target_subdomains,
+          network::mojom::CORSOriginAccessMatchPriority::kDefaultPriority);
     }
     cross_origin_whitelist_entries_.clear();
   }
@@ -324,8 +332,8 @@ void CefContentRendererClient::RunSingleProcessCleanup() {
   if (content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
     RunSingleProcessCleanupOnUIThread();
   } else {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::Bind(&CefContentRendererClient::RunSingleProcessCleanupOnUIThread,
                    base::Unretained(this)));
   }
@@ -376,7 +384,7 @@ void CefContentRendererClient::RenderThreadStarted() {
   if (content::RenderProcessHost::run_renderer_in_process()) {
     // When running in single-process mode register as a destruction observer
     // on the render thread's MessageLoop.
-    base::MessageLoop::current()->AddDestructionObserver(this);
+    base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
   }
 
   blink::WebPrerenderingSupport::Initialize(new CefPrerenderingSupport());
@@ -492,8 +500,7 @@ bool CefContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
                                           const GURL& url,
                                           const std::string& http_method,
                                           bool is_initial_navigation,
-                                          bool is_server_redirect,
-                                          bool* send_referrer) {
+                                          bool is_server_redirect) {
   DCHECK(!frame->Parent());
 
   // For now, we skip the rest for POST submissions.  This is because
@@ -505,23 +512,26 @@ bool CefContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
 
   if (extensions::ExtensionsEnabled()) {
     return extensions::CefExtensionsRendererClient::ShouldFork(
-        frame, url, is_initial_navigation, is_server_redirect, send_referrer);
+        frame, url, is_initial_navigation, is_server_redirect);
   }
 
   return false;
 }
 
-bool CefContentRendererClient::WillSendRequest(
+void CefContentRendererClient::WillSendRequest(
     blink::WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
-    GURL* new_url) {
+    const url::Origin* initiator_origin,
+    GURL* new_url,
+    bool* attach_same_site_cookies) {
   if (extensions::ExtensionsEnabled()) {
-    return extensions_renderer_client_->WillSendRequest(frame, transition_type,
-                                                        url, new_url);
+    extensions_renderer_client_->WillSendRequest(frame, transition_type, url,
+                                                 initiator_origin, new_url,
+                                                 attach_same_site_cookies);
+    if (!new_url->is_empty())
+      return;
   }
-
-  return false;
 }
 
 unsigned long long CefContentRendererClient::VisitedLinkHash(
@@ -535,14 +545,21 @@ bool CefContentRendererClient::IsLinkVisited(unsigned long long link_hash) {
   return observer_->visited_link_slave()->IsVisited(link_hash);
 }
 
+bool CefContentRendererClient::IsOriginIsolatedPepperPlugin(
+    const base::FilePath& plugin_path) {
+  return plugin_path ==
+         base::FilePath::FromUTF8Unsafe(CefContentClient::kPDFPluginPath);
+}
+
 content::BrowserPluginDelegate*
 CefContentRendererClient::CreateBrowserPluginDelegate(
     content::RenderFrame* render_frame,
+    const content::WebPluginInfo& info,
     const std::string& mime_type,
     const GURL& original_url) {
   DCHECK(extensions::ExtensionsEnabled());
   return extensions::CefExtensionsRendererClient::CreateBrowserPluginDelegate(
-      render_frame, mime_type, original_url);
+      render_frame, info, mime_type, original_url);
 }
 
 void CefContentRendererClient::AddSupportedKeySystems(
@@ -585,13 +602,8 @@ void CefContentRendererClient::DevToolsAgentDetached() {
 
 void CefContentRendererClient::CreateRendererService(
     service_manager::mojom::ServiceRequest service_request) {
-  service_context_ = std::make_unique<service_manager::ServiceContext>(
-      std::make_unique<service_manager::ForwardingService>(this),
-      std::move(service_request));
-}
-
-void CefContentRendererClient::OnStart() {
-  context()->connector()->BindConnectorRequest(std::move(connector_request_));
+  DCHECK(!service_binding_.is_bound());
+  service_binding_.Bind(std::move(service_request));
 }
 
 void CefContentRendererClient::OnBindInterface(
@@ -604,7 +616,7 @@ void CefContentRendererClient::OnBindInterface(
 void CefContentRendererClient::GetInterface(
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  connector_->BindInterface(
+  service_binding_.GetConnector()->BindInterface(
       service_manager::Identity(chrome::mojom::kServiceName), interface_name,
       std::move(interface_pipe));
 }
@@ -697,12 +709,14 @@ void CefContentRendererClient::RunSingleProcessCleanupOnUIThread() {
 }
 
 service_manager::Connector* CefContentRendererClient::GetConnector() {
-  if (!connector_)
-    connector_ = service_manager::Connector::Create(&connector_request_);
-  return connector_.get();
+  return service_binding_.GetConnector();
 }
 
-// Enable deprecation warnings for MSVC. See http://crbug.com/585142.
+// Enable deprecation warnings on Windows. See http://crbug.com/585142.
 #if defined(OS_WIN)
+#if defined(__clang__)
+#pragma GCC diagnostic pop
+#else
 #pragma warning(pop)
+#endif
 #endif

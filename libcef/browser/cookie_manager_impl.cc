@@ -10,19 +10,21 @@
 
 #include "libcef/browser/content_browser_client.h"
 #include "libcef/browser/context.h"
+#include "libcef/browser/net/cookie_store_source.h"
 #include "libcef/browser/net/network_delegate.h"
 #include "libcef/common/task_runner_impl.h"
 #include "libcef/common/time_util.h"
 
 #include "base/bind.h"
-#include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/browser_process.h"
+#include "components/net_log/chrome_net_log.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
-#include "net/extras/sqlite/sqlite_persistent_cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "url/gurl.h"
 
@@ -136,7 +138,7 @@ void CefCookieManagerImpl::Initialize(
   if (request_context.get()) {
     request_context_ = request_context;
     request_context_->GetRequestContextImpl(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
         base::Bind(&CefCookieManagerImpl::InitWithContext, this, callback));
   } else {
     SetStoragePath(path, persist_session_cookies, callback);
@@ -162,7 +164,7 @@ void CefCookieManagerImpl::GetCookieStore(
     return;
   }
 
-  DCHECK(is_blocking_ || cookie_store_.get());
+  DCHECK(is_blocking_ || cookie_source_);
 
   // Binding ref-counted |this| to CookieStoreGetter may result in
   // heap-use-after-free if (a) the CookieStoreGetter contains the last
@@ -185,8 +187,8 @@ void CefCookieManagerImpl::GetCookieStore(
 
 net::CookieStore* CefCookieManagerImpl::GetExistingCookieStore() {
   CEF_REQUIRE_IOT();
-  if (cookie_store_.get()) {
-    return cookie_store_.get();
+  if (cookie_source_) {
+    return cookie_source_->GetCookieStore();
   } else if (request_context_impl_.get()) {
     net::CookieStore* cookie_store =
         request_context_impl_->GetExistingCookieStore();
@@ -220,9 +222,10 @@ void CefCookieManagerImpl::SetSupportedSchemes(
 
 bool CefCookieManagerImpl::VisitAllCookies(
     CefRefPtr<CefCookieVisitor> visitor) {
-  GetCookieStore(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-                 base::Bind(&CefCookieManagerImpl::VisitAllCookiesInternal,
-                            this, visitor));
+  GetCookieStore(
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+      base::Bind(&CefCookieManagerImpl::VisitAllCookiesInternal, this,
+                 visitor));
   return true;
 }
 
@@ -230,9 +233,10 @@ bool CefCookieManagerImpl::VisitUrlCookies(
     const CefString& url,
     bool includeHttpOnly,
     CefRefPtr<CefCookieVisitor> visitor) {
-  GetCookieStore(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-                 base::Bind(&CefCookieManagerImpl::VisitUrlCookiesInternal,
-                            this, url, includeHttpOnly, visitor));
+  GetCookieStore(
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+      base::Bind(&CefCookieManagerImpl::VisitUrlCookiesInternal, this, url,
+                 includeHttpOnly, visitor));
   return true;
 }
 
@@ -243,9 +247,10 @@ bool CefCookieManagerImpl::SetCookie(const CefString& url,
   if (!gurl.is_valid())
     return false;
 
-  GetCookieStore(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-                 base::Bind(&CefCookieManagerImpl::SetCookieInternal, this,
-                            gurl, cookie, callback));
+  GetCookieStore(
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+      base::Bind(&CefCookieManagerImpl::SetCookieInternal, this, gurl, cookie,
+                 callback));
   return true;
 }
 
@@ -258,9 +263,10 @@ bool CefCookieManagerImpl::DeleteCookies(
   if (!gurl.is_empty() && !gurl.is_valid())
     return false;
 
-  GetCookieStore(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-                 base::Bind(&CefCookieManagerImpl::DeleteCookiesInternal, this,
-                            gurl, cookie_name, callback));
+  GetCookieStore(
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+      base::Bind(&CefCookieManagerImpl::DeleteCookiesInternal, this, gurl,
+                 cookie_name, callback));
   return true;
 }
 
@@ -287,51 +293,21 @@ bool CefCookieManagerImpl::SetStoragePath(
   if (!path.empty())
     new_path = base::FilePath(path);
 
-  if (cookie_store_.get() &&
-      ((storage_path_.empty() && path.empty()) || storage_path_ == new_path)) {
-    // The path has not changed so don't do anything.
-    RunAsyncCompletionOnIOThread(callback);
-    return true;
+  if (!cookie_source_) {
+    cookie_source_.reset(new CefCookieStoreOwnerSource());
   }
 
-  scoped_refptr<net::SQLitePersistentCookieStore> persistent_store;
-  if (!new_path.empty()) {
-    // TODO(cef): Move directory creation to the blocking pool instead of
-    // allowing file IO on this thread.
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-    if (base::DirectoryExists(new_path) || base::CreateDirectory(new_path)) {
-      const base::FilePath& cookie_path = new_path.AppendASCII("Cookies");
-      persistent_store = new net::SQLitePersistentCookieStore(
-          cookie_path, BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-          // Intentionally using the background task runner exposed by CEF to
-          // facilitate unit test expectations. This task runner MUST be
-          // configured with BLOCK_SHUTDOWN.
-          CefContentBrowserClient::Get()->background_task_runner(),
-          persist_session_cookies, NULL);
-    } else {
-      NOTREACHED() << "The cookie storage directory could not be created";
-      storage_path_.clear();
-    }
-  }
+  cookie_source_->SetCookieStoragePath(new_path, persist_session_cookies,
+                                       g_browser_process->net_log());
 
-  // Set the new cookie store that will be used for all new requests. The old
-  // cookie store, if any, will be automatically flushed and closed when no
-  // longer referenced.
-  cookie_store_.reset(new net::CookieMonster(persistent_store.get(), NULL));
-  if (persistent_store.get() && persist_session_cookies)
-    cookie_store_->SetPersistSessionCookies(true);
-  storage_path_ = new_path;
-
-  // Restore the previously supported schemes.
-  SetSupportedSchemesInternal(supported_schemes_, callback);
-
+  RunAsyncCompletionOnIOThread(callback);
   return true;
 }
 
 bool CefCookieManagerImpl::FlushStore(
     CefRefPtr<CefCompletionCallback> callback) {
   GetCookieStore(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
       base::Bind(&CefCookieManagerImpl::FlushStoreInternal, this, callback));
   return true;
 }
@@ -421,7 +397,8 @@ void CefCookieManagerImpl::RunMethodWithContext(
   } else if (request_context_.get()) {
     // Try again after the request context is initialized.
     request_context_->GetRequestContextImpl(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), method);
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+        method);
   } else {
     NOTREACHED();
   }
@@ -502,10 +479,9 @@ void CefCookieManagerImpl::SetSupportedSchemesInternal(
     return;
   }
 
-  DCHECK(is_blocking_ || cookie_store_.get());
-  if (cookie_store_) {
-    supported_schemes_ = schemes;
-    SetCookieMonsterSchemes(cookie_store_.get(), supported_schemes_);
+  DCHECK(is_blocking_ || cookie_source_);
+  if (cookie_source_) {
+    cookie_source_->SetCookieSupportedSchemes(schemes);
   }
 
   RunAsyncCompletionOnIOThread(callback);
@@ -609,10 +585,10 @@ void CefCookieManagerImpl::DeleteCookiesInternal(
         base::Bind(DeleteCookiesCallbackImpl, callback));
   } else if (cookie_name.empty()) {
     // Delete all matching host cookies.
-    cookie_store->DeleteAllCreatedBetweenWithPredicateAsync(
-        base::Time(), base::Time::Max(),
-        content::StoragePartitionImpl::CreatePredicateForHostCookies(url),
-        base::Bind(DeleteCookiesCallbackImpl, callback));
+    net::CookieDeletionInfo delete_info;
+    delete_info.host = url.host();
+    cookie_store->DeleteAllMatchingInfoAsync(
+        delete_info, base::Bind(DeleteCookiesCallbackImpl, callback));
   } else {
     // Delete all matching host and domain cookies.
     cookie_store->DeleteCookieAsync(

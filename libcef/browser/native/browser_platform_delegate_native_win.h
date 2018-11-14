@@ -14,7 +14,9 @@ class CefBrowserPlatformDelegateNativeWin
     : public CefBrowserPlatformDelegateNative {
  public:
   CefBrowserPlatformDelegateNativeWin(const CefWindowInfo& window_info,
-                                      SkColor background_color);
+                                      SkColor background_color,
+                                      bool use_shared_texture,
+                                      bool use_external_begin_frame);
 
   // CefBrowserPlatformDelegate methods:
   void BrowserDestroyed(CefBrowserHostImpl* browser) override;
@@ -27,7 +29,7 @@ class CefBrowserPlatformDelegateNativeWin
   void SizeTo(int width, int height) override;
   gfx::Point GetScreenPoint(const gfx::Point& view) const override;
   void ViewText(const std::string& text) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   void HandleExternalProtocol(const GURL& url) override;
   void TranslateKeyEvent(content::NativeWebKeyboardEvent& result,

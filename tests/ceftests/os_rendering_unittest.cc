@@ -324,13 +324,12 @@ class OSRTestHandler : public RoutingTestHandler,
   }
 
   // CefRenderHandler methods
-  bool GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
+  void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
     if (test_type_ == OSR_TEST_RESIZE && started()) {
       rect = CefRect(0, 0, kOsrWidth * 2, kOsrHeight * 2);
-      return true;
+      return;
     }
     rect = CefRect(0, 0, kOsrWidth, kOsrHeight);
-    return true;
   }
 
   bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
@@ -452,11 +451,7 @@ class OSRTestHandler : public RoutingTestHandler,
           EXPECT_EQ(dirtyRects.size(), 1U);
           EXPECT_TRUE(IsFullRepaint(dirtyRects[0], GetScaledInt(kOsrWidth),
                                     GetScaledInt(kOsrHeight)));
-#if defined(OS_MACOSX)
-          EXPECT_EQ(0xfffd8081U, *(reinterpret_cast<const uint32*>(buffer)));
-#else
           EXPECT_EQ(0xffff7f7fU, *(reinterpret_cast<const uint32*>(buffer)));
-#endif
           DestroySucceededTestSoon();
         }
         break;
@@ -466,11 +461,7 @@ class OSRTestHandler : public RoutingTestHandler,
           EXPECT_EQ(dirtyRects.size(), 1U);
           EXPECT_TRUE(IsFullRepaint(dirtyRects[0], GetScaledInt(kOsrWidth),
                                     GetScaledInt(kOsrHeight)));
-#if defined(OS_MACOSX)
-          EXPECT_EQ(0x807e0308U, *(reinterpret_cast<const uint32*>(buffer)));
-#else
           EXPECT_EQ(0x80800000U, *(reinterpret_cast<const uint32*>(buffer)));
-#endif
           DestroySucceededTestSoon();
         }
         break;
@@ -715,7 +706,7 @@ class OSRTestHandler : public RoutingTestHandler,
 // first pixel of border
 
 #if defined(OS_MACOSX)
-          EXPECT_EQ(0xff609ad4U, *(reinterpret_cast<const uint32*>(buffer)));
+          EXPECT_EQ(0xff5d99d6U, *(reinterpret_cast<const uint32*>(buffer)));
 #else
           EXPECT_EQ(0xff6497eaU, *(reinterpret_cast<const uint32*>(buffer)));
 #endif

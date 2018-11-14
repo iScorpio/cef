@@ -30,9 +30,14 @@ network::mojom::NetworkContext* CefStoragePartitionProxy::GetNetworkContext() {
   return parent_->GetNetworkContext();
 }
 
-scoped_refptr<content::SharedURLLoaderFactory>
+scoped_refptr<network::SharedURLLoaderFactory>
 CefStoragePartitionProxy::GetURLLoaderFactoryForBrowserProcess() {
   return parent_->GetURLLoaderFactoryForBrowserProcess();
+}
+
+std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+CefStoragePartitionProxy::GetURLLoaderFactoryForBrowserProcessIOThread() {
+  return parent_->GetURLLoaderFactoryForBrowserProcessIOThread();
 }
 
 network::mojom::CookieManager*
@@ -83,6 +88,11 @@ CefStoragePartitionProxy::GetCacheStorageContext() {
   return parent_->GetCacheStorageContext();
 }
 
+content::GeneratedCodeCacheContext*
+CefStoragePartitionProxy::GetGeneratedCodeCacheContext() {
+  return parent_->GetGeneratedCodeCacheContext();
+}
+
 content::HostZoomMap* CefStoragePartitionProxy::GetHostZoomMap() {
   return parent_->GetHostZoomMap();
 }
@@ -109,28 +119,28 @@ void CefStoragePartitionProxy::ClearDataForOrigin(
                               storage_origin);
 }
 
-void CefStoragePartitionProxy::ClearData(
-    uint32_t remove_mask,
-    uint32_t quota_storage_remove_mask,
-    const GURL& storage_origin,
-    const OriginMatcherFunction& origin_matcher,
-    const base::Time begin,
-    const base::Time end,
-    base::OnceClosure callback) {
+void CefStoragePartitionProxy::ClearData(uint32_t remove_mask,
+                                         uint32_t quota_storage_remove_mask,
+                                         const GURL& storage_origin,
+                                         const base::Time begin,
+                                         const base::Time end,
+                                         base::OnceClosure callback) {
   parent_->ClearData(remove_mask, quota_storage_remove_mask, storage_origin,
-                     origin_matcher, begin, end, std::move(callback));
+                     begin, end, std::move(callback));
 }
 
 void CefStoragePartitionProxy::ClearData(
     uint32_t remove_mask,
     uint32_t quota_storage_remove_mask,
     const OriginMatcherFunction& origin_matcher,
-    const CookieMatcherFunction& cookie_matcher,
+    network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
+    bool perform_cleanup,
     const base::Time begin,
     const base::Time end,
     base::OnceClosure callback) {
   parent_->ClearData(remove_mask, quota_storage_remove_mask, origin_matcher,
-                     cookie_matcher, begin, end, std::move(callback));
+                     std::move(cookie_deletion_filter), perform_cleanup, begin,
+                     end, std::move(callback));
 }
 
 void CefStoragePartitionProxy::ClearHttpAndMediaCaches(
@@ -142,8 +152,16 @@ void CefStoragePartitionProxy::ClearHttpAndMediaCaches(
                                    std::move(callback));
 }
 
+void CefStoragePartitionProxy::ClearCodeCaches(base::OnceClosure callback) {
+  parent_->ClearCodeCaches(std::move(callback));
+}
+
 void CefStoragePartitionProxy::Flush() {
   parent_->Flush();
+}
+
+void CefStoragePartitionProxy::ResetURLLoaderFactories() {
+  parent_->ResetURLLoaderFactories();
 }
 
 void CefStoragePartitionProxy::ClearBluetoothAllowedDevicesMapForTesting() {
@@ -183,11 +201,6 @@ CefStoragePartitionProxy::GetBluetoothAllowedDevicesMap() {
   return parent_->GetBluetoothAllowedDevicesMap();
 }
 
-content::BlobURLLoaderFactory*
-CefStoragePartitionProxy::GetBlobURLLoaderFactory() {
-  return parent_->GetBlobURLLoaderFactory();
-}
-
 content::BlobRegistryWrapper* CefStoragePartitionProxy::GetBlobRegistry() {
   return parent_->GetBlobRegistry();
 }
@@ -195,6 +208,10 @@ content::BlobRegistryWrapper* CefStoragePartitionProxy::GetBlobRegistry() {
 content::PrefetchURLLoaderService*
 CefStoragePartitionProxy::GetPrefetchURLLoaderService() {
   return parent_->GetPrefetchURLLoaderService();
+}
+
+content::CookieStoreContext* CefStoragePartitionProxy::GetCookieStoreContext() {
+  return parent_->GetCookieStoreContext();
 }
 
 content::URLLoaderFactoryGetter*
@@ -208,7 +225,7 @@ content::BrowserContext* CefStoragePartitionProxy::browser_context() const {
 
 mojo::BindingId CefStoragePartitionProxy::Bind(
     int process_id,
-    mojo::InterfaceRequest<content::mojom::StoragePartitionService> request) {
+    mojo::InterfaceRequest<blink::mojom::StoragePartitionService> request) {
   return parent_->Bind(process_id, std::move(request));
 }
 

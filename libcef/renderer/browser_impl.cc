@@ -13,31 +13,30 @@
 #include "libcef/common/process_message_impl.h"
 #include "libcef/common/request_impl.h"
 #include "libcef/common/response_manager.h"
+#include "libcef/renderer/blink_glue.h"
 #include "libcef/renderer/content_renderer_client.h"
 #include "libcef/renderer/dom_document_impl.h"
 #include "libcef/renderer/render_frame_util.h"
 #include "libcef/renderer/thread_util.h"
-#include "libcef/renderer/webkit_glue.h"
 
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/renderer/document_state.h"
-#include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_view.h"
-#include "content/renderer/navigation_state_impl.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebFrameContentDumper.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "content/renderer/navigation_state.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_frame_content_dumper.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_security_policy.h"
+#include "third_party/blink/public/web/web_view.h"
 
 using blink::WebFrame;
 using blink::WebLocalFrame;
@@ -72,25 +71,25 @@ CefRefPtr<CefBrowserHost> CefBrowserImpl::GetHost() {
 bool CefBrowserImpl::CanGoBack() {
   CEF_REQUIRE_RT_RETURN(false);
 
-  return webkit_glue::CanGoBack(render_view()->GetWebView());
+  return blink_glue::CanGoBack(render_view()->GetWebView());
 }
 
 void CefBrowserImpl::GoBack() {
   CEF_REQUIRE_RT_RETURN_VOID();
 
-  webkit_glue::GoBack(render_view()->GetWebView());
+  blink_glue::GoBack(render_view()->GetWebView());
 }
 
 bool CefBrowserImpl::CanGoForward() {
   CEF_REQUIRE_RT_RETURN(false);
 
-  return webkit_glue::CanGoForward(render_view()->GetWebView());
+  return blink_glue::CanGoForward(render_view()->GetWebView());
 }
 
 void CefBrowserImpl::GoForward() {
   CEF_REQUIRE_RT_RETURN_VOID();
 
-  webkit_glue::GoForward(render_view()->GetWebView());
+  blink_glue::GoForward(render_view()->GetWebView());
 }
 
 bool CefBrowserImpl::IsLoading() {
@@ -110,7 +109,8 @@ void CefBrowserImpl::Reload() {
   if (render_view()->GetWebView()) {
     WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
     if (main_frame && main_frame->IsWebLocalFrame()) {
-      main_frame->ToWebLocalFrame()->Reload(blink::WebFrameLoadType::kReload);
+      main_frame->ToWebLocalFrame()->StartReload(
+          blink::WebFrameLoadType::kReload);
     }
   }
 }
@@ -121,7 +121,7 @@ void CefBrowserImpl::ReloadIgnoreCache() {
   if (render_view()->GetWebView()) {
     WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
     if (main_frame && main_frame->IsWebLocalFrame()) {
-      main_frame->ToWebLocalFrame()->Reload(
+      main_frame->ToWebLocalFrame()->StartReload(
           blink::WebFrameLoadType::kReloadBypassingCache);
     }
   }
@@ -313,7 +313,7 @@ void CefBrowserImpl::LoadRequest(const CefMsg_LoadRequest_Params& params) {
   blink::WebURLRequest request;
   CefRequestImpl::Get(params, request);
 
-  web_frame->LoadRequest(request);
+  web_frame->StartNavigation(request);
 }
 
 bool CefBrowserImpl::SendProcessMessage(CefProcessId target_process,
@@ -345,15 +345,15 @@ CefRefPtr<CefFrameImpl> CefBrowserImpl::GetWebFrameImpl(
   if (it != frames_.end())
     return it->second;
 
-  CefRefPtr<CefFrameImpl> framePtr(new CefFrameImpl(this, frame));
+  CefRefPtr<CefFrameImpl> framePtr(new CefFrameImpl(this, frame, frame_id));
   frames_.insert(std::make_pair(frame_id, framePtr));
 
   const int64_t parent_id = frame->Parent() == NULL
-                                ? webkit_glue::kInvalidFrameId
+                                ? blink_glue::kInvalidFrameId
                                 : frame->Parent()->IsWebLocalFrame()
                                       ? render_frame_util::GetIdentifier(
                                             frame->Parent()->ToWebLocalFrame())
-                                      : webkit_glue::kInvalidFrameId;
+                                      : blink_glue::kInvalidFrameId;
   const base::string16& name =
       base::UTF8ToUTF16(render_frame_util::GetName(frame));
 
@@ -364,7 +364,7 @@ CefRefPtr<CefFrameImpl> CefBrowserImpl::GetWebFrameImpl(
 }
 
 CefRefPtr<CefFrameImpl> CefBrowserImpl::GetWebFrameImpl(int64_t frame_id) {
-  if (frame_id == webkit_glue::kInvalidFrameId) {
+  if (frame_id == blink_glue::kInvalidFrameId) {
     if (render_view()->GetWebView()) {
       WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
       if (main_frame && main_frame->IsWebLocalFrame()) {
@@ -427,10 +427,6 @@ void CefBrowserImpl::OnDestruct() {
   response_manager_.reset();
 
   CefContentRendererClient::Get()->OnBrowserDestroyed(this);
-}
-
-void CefBrowserImpl::DidStopLoading() {
-  OnLoadingStateChange(false);
 }
 
 void CefBrowserImpl::DidFinishLoad(blink::WebLocalFrame* frame) {
@@ -528,6 +524,7 @@ bool CefBrowserImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(CefMsg_Response, OnResponse)
     IPC_MESSAGE_HANDLER(CefMsg_ResponseAck, OnResponseAck)
     IPC_MESSAGE_HANDLER(CefMsg_LoadRequest, LoadRequest)
+    IPC_MESSAGE_HANDLER(CefMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -607,7 +604,7 @@ void CefBrowserImpl::OnRequest(const Cef_Request_Params& params) {
               blink::WebFrameContentDumper::DumpAsMarkup(web_frame).Utf8();
           success = true;
         } else if (base::LowerCaseEqualsASCII(command, "gettext")) {
-          response = webkit_glue::DumpDocumentText(web_frame);
+          response = blink_glue::DumpDocumentText(web_frame);
           success = true;
         } else if (web_frame->ExecuteCommand(
                        blink::WebString::FromUTF8(command))) {
@@ -659,6 +656,10 @@ void CefBrowserImpl::OnResponseAck(int request_id) {
   response_manager_->RunAckHandler(request_id);
 }
 
+void CefBrowserImpl::OnDidStopLoading() {
+  OnLoadingStateChange(false);
+}
+
 void CefBrowserImpl::OnLoadingStateChange(bool isLoading) {
   CefRefPtr<CefApp> app = CefContentClient::Get()->application();
   if (app.get()) {
@@ -667,8 +668,8 @@ void CefBrowserImpl::OnLoadingStateChange(bool isLoading) {
       CefRefPtr<CefLoadHandler> load_handler = handler->GetLoadHandler();
       if (load_handler.get()) {
         WebView* web_view = render_view()->GetWebView();
-        const bool canGoBack = webkit_glue::CanGoBack(web_view);
-        const bool canGoForward = webkit_glue::CanGoForward(web_view);
+        const bool canGoBack = blink_glue::CanGoBack(web_view);
+        const bool canGoForward = blink_glue::CanGoForward(web_view);
 
         load_handler->OnLoadingStateChange(this, isLoading, canGoBack,
                                            canGoForward);

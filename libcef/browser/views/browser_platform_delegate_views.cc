@@ -165,14 +165,22 @@ void CefBrowserPlatformDelegateViews::PopupBrowserCreated(
   }
 }
 
+bool CefBrowserPlatformDelegateViews::CanUseSharedTexture() const {
+  return native_delegate_->CanUseSharedTexture();
+}
+
+bool CefBrowserPlatformDelegateViews::CanUseExternalBeginFrame() const {
+  return native_delegate_->CanUseExternalBeginFrame();
+}
+
 SkColor CefBrowserPlatformDelegateViews::GetBackgroundColor() const {
   return native_delegate_->GetBackgroundColor();
 }
 
-void CefBrowserPlatformDelegateViews::WasResized() {
+void CefBrowserPlatformDelegateViews::SynchronizeVisualProperties() {
   content::RenderViewHost* host = browser_->web_contents()->GetRenderViewHost();
   if (host)
-    host->GetWidget()->WasResized();
+    host->GetWidget()->SynchronizeVisualProperties();
 }
 
 void CefBrowserPlatformDelegateViews::SendKeyEvent(
@@ -217,10 +225,10 @@ void CefBrowserPlatformDelegateViews::ViewText(const std::string& text) {
   native_delegate_->ViewText(text);
 }
 
-void CefBrowserPlatformDelegateViews::HandleKeyboardEvent(
+bool CefBrowserPlatformDelegateViews::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   // The BrowserView will handle accelerators.
-  browser_view_->HandleKeyboardEvent(event);
+  return browser_view_->HandleKeyboardEvent(event);
 }
 
 void CefBrowserPlatformDelegateViews::HandleExternalProtocol(const GURL& url) {

@@ -1208,7 +1208,7 @@ namespace client {
 
 BrowserWindowOsrMac::BrowserWindowOsrMac(BrowserWindow::Delegate* delegate,
                                          const std::string& startup_url,
-                                         const OsrRenderer::Settings& settings)
+                                         const OsrRendererSettings& settings)
     : BrowserWindow(delegate),
       renderer_(settings),
       nsview_(NULL),
@@ -1348,13 +1348,18 @@ bool BrowserWindowOsrMac::GetRootScreenRect(CefRefPtr<CefBrowser> browser,
   return false;
 }
 
-bool BrowserWindowOsrMac::GetViewRect(CefRefPtr<CefBrowser> browser,
+void BrowserWindowOsrMac::GetViewRect(CefRefPtr<CefBrowser> browser,
                                       CefRect& rect) {
   CEF_REQUIRE_UI_THREAD();
   REQUIRE_MAIN_THREAD();
 
-  if (!nsview_)
-    return false;
+  rect.x = rect.y = 0;
+
+  if (!nsview_) {
+    // Never return an empty rectangle.
+    rect.width = rect.height = 1;
+    return;
+  }
 
   const float device_scale_factor = [GLView(nsview_) getDeviceScaleFactor];
 
@@ -1365,11 +1370,12 @@ bool BrowserWindowOsrMac::GetViewRect(CefRefPtr<CefBrowser> browser,
   bounds = [GLView(nsview_) convertRectToBackingInternal:bounds];
 
   // Convert to browser view coordinates.
-  rect.x = rect.y = 0;
   rect.width = DeviceToLogical(bounds.size.width, device_scale_factor);
+  if (rect.width == 0)
+    rect.width = 1;
   rect.height = DeviceToLogical(bounds.size.height, device_scale_factor);
-
-  return true;
+  if (rect.height == 0)
+    rect.height = 1;
 }
 
 bool BrowserWindowOsrMac::GetScreenPoint(CefRefPtr<CefBrowser> browser,
