@@ -30,10 +30,9 @@ CefAudioPushSink::CefAudioPushSink(const AudioParameters& params,
   DCHECK(browser);
   DCHECK(cef_audio_handler);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&CefAudioPushSink::InitOnUIThread,
-                     base::Unretained(this)));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(&CefAudioPushSink::InitOnUIThread,
+                                          base::Unretained(this)));
 }
 
 CefAudioPushSink::~CefAudioPushSink() = default;

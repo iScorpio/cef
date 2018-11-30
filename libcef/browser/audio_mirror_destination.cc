@@ -6,7 +6,8 @@
 #include "audio_mirror_destination.h"
 #include "audio_output_stream.h"
 
-#include "content/public/browser/browser_thread.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "media/base/bind_to_current_loop.h"
 
 CefAudioMirrorDestination::CefAudioMirrorDestination(
@@ -24,8 +25,8 @@ CefAudioMirrorDestination::CefAudioMirrorDestination(
 void CefAudioMirrorDestination::Start() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&content::AudioMirroringManager::StartMirroring,
                      base::Unretained(mirroring_manager_),
                      base::Unretained(this)));
@@ -34,8 +35,8 @@ void CefAudioMirrorDestination::Start() {
 void CefAudioMirrorDestination::Stop() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&content::AudioMirroringManager::StopMirroring,
                      base::Unretained(mirroring_manager_),
                      base::Unretained(this)));
@@ -52,8 +53,8 @@ void CefAudioMirrorDestination::Stop() {
 void CefAudioMirrorDestination::QueryForMatches(
     const std::set<content::GlobalFrameRoutingId>& candidates,
     MatchesCallback results_callback) {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&CefAudioMirrorDestination::QueryForMatchesOnUIThread,
                      base::Unretained(this), candidates,
                      media::BindToCurrentLoop(std::move(results_callback))));
