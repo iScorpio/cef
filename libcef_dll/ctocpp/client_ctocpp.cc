@@ -15,6 +15,7 @@
 #include "libcef_dll/ctocpp/client_ctocpp.h"
 #include "libcef_dll/cpptoc/browser_cpptoc.h"
 #include "libcef_dll/cpptoc/process_message_cpptoc.h"
+#include "libcef_dll/ctocpp/audio_handler_ctocpp.h"
 #include "libcef_dll/ctocpp/context_menu_handler_ctocpp.h"
 #include "libcef_dll/ctocpp/dialog_handler_ctocpp.h"
 #include "libcef_dll/ctocpp/display_handler_ctocpp.h"
@@ -30,6 +31,20 @@
 #include "libcef_dll/ctocpp/request_handler_ctocpp.h"
 
 // VIRTUAL METHODS - Body may be edited by hand.
+
+CefRefPtr<CefAudioHandler> CefClientCToCpp::GetAudioHandler() {
+  cef_client_t* _struct = GetStruct();
+  if (CEF_MEMBER_MISSING(_struct, get_audio_handler))
+    return NULL;
+
+  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
+
+  // Execute
+  cef_audio_handler_t* _retval = _struct->get_audio_handler(_struct);
+
+  // Return type: refptr_same
+  return CefAudioHandlerCToCpp::Wrap(_retval);
+}
 
 NO_SANITIZE("cfi-icall")
 CefRefPtr<CefContextMenuHandler> CefClientCToCpp::GetContextMenuHandler() {

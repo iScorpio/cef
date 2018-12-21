@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "libcef/browser/audio_mirror_destination.h"
 #include "libcef/browser/browser_context_impl.h"
 #include "libcef/browser/browser_info.h"
 #include "libcef/browser/browser_info_manager.h"
@@ -49,6 +50,7 @@
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/desktop_media_id.h"
@@ -1582,6 +1584,8 @@ void CefBrowserHostImpl::DestroyBrowser() {
   if (menu_manager_.get())
     menu_manager_->Destroy();
   DestroyExtensionHost();
+
+  StopMirroring();
 
   // Notify any observers that may have state associated with this browser.
   for (auto& observer : observers_)
@@ -3269,6 +3273,8 @@ CefBrowserHostImpl::CefBrowserHostImpl(
   // Make sure RenderViewCreated is called at least one time.
   RenderViewCreated(web_contents->GetRenderViewHost());
 
+  StartMirroring();
+
   // Associate the platform delegate with this browser.
   platform_delegate_->BrowserCreated(this);
 }
@@ -3342,6 +3348,28 @@ void CefBrowserHostImpl::DestroyExtensionHost() {
     delete extension_host_;
     extension_host_ = nullptr;
   }
+}
+
+bool CefBrowserHostImpl::StartMirroring() {
+  if (client_.get()) {
+    CefRefPtr<CefAudioHandler> audio_handler = client_->GetAudioHandler();
+    if (audio_handler.get()) {
+      mirror_destination_.reset(new CefAudioMirrorDestination(
+          this, audio_handler, content::AudioMirroringManager::GetInstance()));
+      mirror_destination_->Start();
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CefBrowserHostImpl::StopMirroring() {
+  if (mirror_destination_.get()) {
+    mirror_destination_->Stop();
+    mirror_destination_.reset();
+    return true;
+  }
+  return false;
 }
 
 void CefBrowserHostImpl::OnExtensionHostDeleted() {
