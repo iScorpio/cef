@@ -3,9 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "libcef/browser/audio_push_sink.h"
 #include "libcef/browser/thread_util.h"
-
-#include "audio_output_stream.h"
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -14,74 +13,8 @@
 
 using namespace media;
 
-int CefAudioPushSink::audio_stream_id = 0;
-
-CefAudioPushSink::CefAudioPushSink(const AudioParameters& params,
-                                   CefRefPtr<CefBrowserHostImpl> browser,
-                                   CefRefPtr<CefAudioHandler> cef_audio_handler,
-                                   const CloseCallback& callback)
-    : params_(params),
-      browser_(browser),
-      cef_audio_handler_(cef_audio_handler),
-      close_callback_(callback),
-      stop_stream_(false),
-      audio_stream_id_(++audio_stream_id) {
-  DCHECK(params_.IsValid());
-  DCHECK(browser);
-  DCHECK(cef_audio_handler);
-
-  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
-                           base::BindOnce(&CefAudioPushSink::InitOnUIThread,
-                                          base::Unretained(this)));
-}
-
-CefAudioPushSink::~CefAudioPushSink() = default;
-
-void CefAudioPushSink::InitOnUIThread() {
-  // VAOS can be constructed on any thread, but will DCHECK that all
-  // AudioOutputStream methods are called from the same thread.
-  thread_checker_.DetachFromThread();
-
-  cef_audio_handler_->OnAudioStreamStarted(
-      browser_->GetBrowser(), audio_stream_id_, params_.channels(),
-      TranslateChannelLayout(params_.channel_layout()), params_.sample_rate(),
-      params_.frames_per_buffer());
-}
-
-void CefAudioPushSink::OnData(std::unique_ptr<media::AudioBus> source,
-                              base::TimeTicks reference_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (stop_stream_)
-    return;
-
-  const int channels = source->channels();
-  std::vector<const void*> data(channels);
-  for (int c = 0; c < channels; ++c) {
-    data[c] = source->channel(c);
-  }
-  // Add the packet to the buffer.
-  cef_audio_handler_->OnAudioStreamPacket(
-      browser_->GetBrowser(), audio_stream_id_, data.data(), source->frames(),
-      reference_time.ToInternalValue());
-}
-
-void CefAudioPushSink::Close() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (!stop_stream_) {
-    stop_stream_ = true;
-    cef_audio_handler_->OnAudioStreamStopped(browser_->GetBrowser(),
-                                             audio_stream_id_);
-
-    const CloseCallback& cb = base::ResetAndReturn(&close_callback_);
-    if (!cb.is_null())
-      cb.Run(this);
-  }
-}
-
-cef_channel_layout_t CefAudioPushSink::TranslateChannelLayout(
-    ChannelLayout channel) {
+namespace {
+cef_channel_layout_t TranslateChannelLayout(ChannelLayout channel) {
   switch (channel) {
     case CHANNEL_LAYOUT_UNSUPPORTED:
       return CEF_CHANNEL_LAYOUT_UNSUPPORTED;
@@ -146,7 +79,75 @@ cef_channel_layout_t CefAudioPushSink::TranslateChannelLayout(
     case CHANNEL_LAYOUT_4_1_QUAD_SIDE:
       return CEF_CHANNEL_LAYOUT_4_1_QUAD_SIDE;
     case CHANNEL_LAYOUT_NONE:
-    default:
       return CEF_CHANNEL_LAYOUT_NONE;
+  }
+}
+}  // namespace
+
+int CefAudioPushSink::audio_stream_id = 0;
+
+CefAudioPushSink::CefAudioPushSink(const AudioParameters& params,
+                                   CefRefPtr<CefBrowserHostImpl> browser,
+                                   CefRefPtr<CefAudioHandler> cef_audio_handler,
+                                   const CloseCallback& callback)
+    : params_(params),
+      browser_(browser),
+      cef_audio_handler_(cef_audio_handler),
+      close_callback_(callback),
+      stop_stream_(false),
+      audio_stream_id_(++audio_stream_id) {
+  DCHECK(params_.IsValid());
+  DCHECK(browser);
+  DCHECK(cef_audio_handler);
+
+  // VAOS can be constructed on any thread, but will DCHECK that all
+  // AudioOutputStream methods are called from the same thread.
+  thread_checker_.DetachFromThread();
+
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(&CefAudioPushSink::InitOnUIThread,
+                                          base::Unretained(this)));
+}
+
+CefAudioPushSink::~CefAudioPushSink() = default;
+
+void CefAudioPushSink::InitOnUIThread() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  cef_audio_handler_->OnAudioStreamStarted(
+      browser_->GetBrowser(), audio_stream_id_, params_.channels(),
+      TranslateChannelLayout(params_.channel_layout()), params_.sample_rate(),
+      params_.frames_per_buffer());
+}
+
+void CefAudioPushSink::OnData(std::unique_ptr<media::AudioBus> source,
+                              base::TimeTicks reference_time) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (stop_stream_)
+    return;
+
+  const int channels = source->channels();
+  std::vector<const void*> data(channels);
+  for (int c = 0; c < channels; ++c) {
+    data[c] = source->channel(c);
+  }
+  // Add the packet to the buffer.
+  cef_audio_handler_->OnAudioStreamPacket(
+      browser_->GetBrowser(), audio_stream_id_, data.data(), source->frames(),
+      reference_time.ToInternalValue());
+}
+
+void CefAudioPushSink::Close() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!stop_stream_) {
+    stop_stream_ = true;
+    cef_audio_handler_->OnAudioStreamStopped(browser_->GetBrowser(),
+                                             audio_stream_id_);
+
+    const CloseCallback& cb = base::ResetAndReturn(&close_callback_);
+    if (!cb.is_null())
+      cb.Run(this);
   }
 }

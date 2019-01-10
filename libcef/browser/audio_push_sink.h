@@ -35,7 +35,6 @@ class CefAudioPushSink : public media::AudioPushSink {
 
  private:
   void InitOnUIThread();
-  cef_channel_layout_t TranslateChannelLayout(media::ChannelLayout channel);
 
   const media::AudioParameters params_;
   CefRefPtr<CefBrowserHostImpl> browser_;

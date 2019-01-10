@@ -43,6 +43,7 @@
 
 ///
 // Implement this interface to handle audio events
+// All methods will be called on the UI thread
 ///
 /*--cef(source=client)--*/
 class CefAudioHandler : public virtual CefBaseRefCounted {
@@ -59,8 +60,6 @@ class CefAudioHandler : public virtual CefBaseRefCounted {
   // |frames_per_buffer| becomes the normally used amount of frames
   // on called stream defined.
   // On |process| can be the used class added who handle to stream.
-  //
-  // Will be called on the UI thread
   ///
   /*--cef()--*/
   virtual void OnAudioStreamStarted(CefRefPtr<CefBrowser> browser,
@@ -74,8 +73,6 @@ class CefAudioHandler : public virtual CefBaseRefCounted {
   // Event handler for new audio packet from |audio_stream_id|,
   // |data| is an array representing raw PCM data.
   // |frames| is the number of frames in the PCM packet.
-  //
-  // Will be called on the UI thread
   ///
   /*--cef()--*/
   virtual void OnAudioStreamPacket(CefRefPtr<CefBrowser> browser,
@@ -88,8 +85,6 @@ class CefAudioHandler : public virtual CefBaseRefCounted {
   // Event handler for stream |audio_stream_id| has been stopped,
   // for every OnAudioStreamStarted, OnAudioSteamStopped will be
   // called.
-  //
-  // Will be called on the UI thread
   ///
   /*--cef()--*/
   virtual void OnAudioStreamStopped(CefRefPtr<CefBrowser> browser,

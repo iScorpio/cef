@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "audio_mirror_destination.h"
-#include "audio_output_stream.h"
+#include "libcef/browser/audio_mirror_destination.h"
+#include "libcef/browser/audio_push_sink.h"
 
 #include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
