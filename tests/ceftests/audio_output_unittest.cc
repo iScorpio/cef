@@ -9,6 +9,8 @@
 
 namespace {
 const char kTestUrl[] = "http://tests/audiooutputtest";
+
+// Taken from: http://www.iandevlin.com/blog/2012/09/html5/html5-media-and-data-uri/
 const char kTestHtml[] =
     "<!DOCTYPE html><html><head><meta "
     "charset=\"utf-8\"/></head><body><p>TEST</p><iframe "
