@@ -1,8 +1,8 @@
 diff --git chrome/browser/vr/BUILD.gn chrome/browser/vr/BUILD.gn
-index 8807045a1241..84c2d8e381ff 100644
+index b62afd67f585..39dbd57df47a 100644
 --- chrome/browser/vr/BUILD.gn
 +++ chrome/browser/vr/BUILD.gn
-@@ -406,6 +406,7 @@ source_set("vr_base") {
+@@ -419,6 +419,7 @@ source_set("vr_base") {
    ]
  
    deps = [

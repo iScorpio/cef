@@ -503,10 +503,11 @@ void CefContentBrowserClient::RenderProcessWillLaunch(
   *service_request = mojo::MakeRequest(&service);
   service_manager::mojom::PIDReceiverPtr pid_receiver;
   service_manager::Identity renderer_identity = host->GetChildIdentity();
-  ChromeService::GetInstance()->connector()->StartService(
+  ChromeService::GetInstance()->connector()->RegisterServiceInstance(
       service_manager::Identity(chrome::mojom::kRendererServiceName,
-                                renderer_identity.user_id(),
-                                renderer_identity.instance()),
+                                renderer_identity.instance_group(),
+                                renderer_identity.instance_id(),
+                                base::Token::CreateRandom()),
       std::move(service), mojo::MakeRequest(&pid_receiver));
 }
 
@@ -733,7 +734,8 @@ void CefContentBrowserClient::AppendExtraCommandLineSwitches(
     // Propagate the following switches to the zygote command line (along with
     // any associated values) if present in the browser command line.
     static const char* const kSwitchNames[] = {
-        switches::kPpapiFlashPath, switches::kPpapiFlashVersion,
+        switches::kPpapiFlashPath,
+        switches::kPpapiFlashVersion,
     };
     command_line->CopySwitchesFrom(*browser_cmd, kSwitchNames,
                                    arraysize(kSwitchNames));
@@ -1094,9 +1096,11 @@ void CefContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
 bool CefContentBrowserClient::WillCreateURLLoaderFactory(
     content::BrowserContext* browser_context,
     content::RenderFrameHost* frame,
+    int render_process_id,
     bool is_navigation,
     const url::Origin& request_initiator,
     network::mojom::URLLoaderFactoryRequest* factory_request,
+    network::mojom::TrustedURLLoaderHeaderClientPtrInfo* header_client,
     bool* bypass_redirect_checks) {
   if (!extensions::ExtensionsEnabled())
     return false;
@@ -1105,7 +1109,8 @@ bool CefContentBrowserClient::WillCreateURLLoaderFactory(
       extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
           browser_context);
   bool use_proxy = web_request_api->MaybeProxyURLLoaderFactory(
-      frame, is_navigation, factory_request);
+      browser_context, frame, render_process_id, is_navigation, factory_request,
+      header_client);
   if (bypass_redirect_checks)
     *bypass_redirect_checks = use_proxy;
   return use_proxy;
@@ -1118,7 +1123,9 @@ bool CefContentBrowserClient::HandleExternalProtocol(
     content::NavigationUIData* navigation_data,
     bool is_main_frame,
     ui::PageTransition page_transition,
-    bool has_user_gesture) {
+    bool has_user_gesture,
+    const std::string& method,
+    const net::HttpRequestHeaders& headers) {
   CEF_POST_TASK(
       CEF_UIT,
       base::Bind(

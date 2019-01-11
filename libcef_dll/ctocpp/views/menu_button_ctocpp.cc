@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Embedded Framework Authors. All rights
+// Copyright (c) 2019 The Chromium Embedded Framework Authors. All rights
 // reserved. Use of this source code is governed by a BSD-style license that
 // can be found in the LICENSE file.
 //
@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=7d123f6d34a215783417dfe6451483897049d07c$
+// $hash=75a8c7434e17ea5b527795202ad215733f7c75b1$
 //
 
 #include "libcef_dll/ctocpp/views/menu_button_ctocpp.h"
@@ -32,8 +32,7 @@ NO_SANITIZE("cfi-icall")
 CefRefPtr<CefMenuButton> CefMenuButton::CreateMenuButton(
     CefRefPtr<CefMenuButtonDelegate> delegate,
     const CefString& text,
-    bool with_frame,
-    bool with_menu_marker) {
+    bool with_frame) {
   // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
 
   // Verify param: delegate; type: refptr_diff
@@ -45,7 +44,7 @@ CefRefPtr<CefMenuButton> CefMenuButton::CreateMenuButton(
   // Execute
   cef_menu_button_t* _retval =
       cef_menu_button_create(CefMenuButtonDelegateCppToC::Wrap(delegate),
-                             text.GetStruct(), with_frame, with_menu_marker);
+                             text.GetStruct(), with_frame);
 
   // Return type: refptr_same
   return CefMenuButtonCToCpp::Wrap(_retval);

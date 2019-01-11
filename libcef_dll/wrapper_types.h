@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Embedded Framework Authors. All rights
+// Copyright (c) 2019 The Chromium Embedded Framework Authors. All rights
 // reserved. Use of this source code is governed by a BSD-style license that
 // can be found in the LICENSE file.
 //
@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=acb17e16a6d4d3e2f6d45514613bd0943fb33f4f$
+// $hash=2465514c5a784838334475fd06fb3c1bf1755fd6$
 //
 
 #ifndef CEF_LIBCEF_DLL_WRAPPER_TYPES_H_
@@ -21,7 +21,6 @@ enum CefWrapperType {
   WT_BASE_SCOPED,
   WT_ACCESSIBILITY_HANDLER,
   WT_APP,
-  WT_AUDIO_HANDLER,
   WT_AUTH_CALLBACK,
   WT_BEFORE_DOWNLOAD_CALLBACK,
   WT_BINARY_VALUE,

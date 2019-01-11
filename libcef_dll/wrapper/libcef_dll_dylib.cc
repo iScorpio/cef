@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Embedded Framework Authors. All rights
+// Copyright (c) 2019 The Chromium Embedded Framework Authors. All rights
 // reserved. Use of this source code is governed by a BSD-style license that
 // can be found in the LICENSE file.
 //
@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=322e6c3e92ce399d47f8ee00070325f523763c64$
+// $hash=ef8269462464beba6718a2e0d03e0f1cb41901bf$
 //
 
 #include <dlfcn.h>
@@ -324,7 +324,6 @@ typedef struct _cef_label_button_t* (*cef_label_button_create_ptr)(
 typedef struct _cef_menu_button_t* (*cef_menu_button_create_ptr)(
     struct _cef_menu_button_delegate_t*,
     const cef_string_t*,
-    int,
     int);
 typedef struct _cef_panel_t* (*cef_panel_create_ptr)(
     struct _cef_panel_delegate_t*);
@@ -1701,10 +1700,8 @@ NO_SANITIZE("cfi-icall")
 struct _cef_menu_button_t* cef_menu_button_create(
     struct _cef_menu_button_delegate_t* delegate,
     const cef_string_t* text,
-    int with_frame,
-    int with_menu_marker) {
-  return g_libcef_pointers.cef_menu_button_create(delegate, text, with_frame,
-                                                  with_menu_marker);
+    int with_frame) {
+  return g_libcef_pointers.cef_menu_button_create(delegate, text, with_frame);
 }
 
 NO_SANITIZE("cfi-icall")
