@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Embedded Framework Authors. All rights
+// Copyright (c) 2019 The Chromium Embedded Framework Authors. All rights
 // reserved. Use of this source code is governed by a BSD-style license that
 // can be found in the LICENSE file.
 //
@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=96461e870e8c5d80b1258c80a307baf218fb8f44$
+// $hash=e8d9b1d0fef57119a75f3a087eb6ca04c8c8856a$
 //
 
 #include "libcef_dll/ctocpp/audio_handler_ctocpp.h"
@@ -17,6 +17,7 @@
 
 // VIRTUAL METHODS - Body may be edited by hand.
 
+NO_SANITIZE("cfi-icall")
 void CefAudioHandlerCToCpp::OnAudioStreamStarted(CefRefPtr<CefBrowser> browser,
                                                  int audio_stream_id,
                                                  int channels,
@@ -40,6 +41,7 @@ void CefAudioHandlerCToCpp::OnAudioStreamStarted(CefRefPtr<CefBrowser> browser,
                                    sample_rate, frames_per_buffer);
 }
 
+NO_SANITIZE("cfi-icall")
 void CefAudioHandlerCToCpp::OnAudioStreamPacket(CefRefPtr<CefBrowser> browser,
                                                 int audio_stream_id,
                                                 const void** data,
@@ -65,6 +67,7 @@ void CefAudioHandlerCToCpp::OnAudioStreamPacket(CefRefPtr<CefBrowser> browser,
                                   audio_stream_id, data, frames, pts);
 }
 
+NO_SANITIZE("cfi-icall")
 void CefAudioHandlerCToCpp::OnAudioStreamStopped(CefRefPtr<CefBrowser> browser,
                                                  int audio_stream_id) {
   cef_audio_handler_t* _struct = GetStruct();

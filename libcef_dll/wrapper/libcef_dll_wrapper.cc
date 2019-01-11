@@ -9,7 +9,7 @@
 // implementations. See the translator.README.txt file in the tools directory
 // for more information.
 //
-// $hash=dfa41e1f1e43a693fb48a8de17a8a7cddba8c60a$
+// $hash=1bd14a5fc8a82ee6b7e3ba80afb4eb031bf0d11d$
 //
 
 #include "include/capi/cef_app_capi.h"
