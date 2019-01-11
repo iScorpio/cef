@@ -2892,8 +2892,13 @@ typedef enum {
   // Front L, Front R, Side L, Side R, LFE
   CEF_CHANNEL_LAYOUT_4_1_QUAD_SIDE = 31,
 
+  // Actual channel layout is specified in the bitstream and the actual channel
+  // count is unknown at Chromium media pipeline level (useful for audio
+  // pass-through mode).
+  CEF_CHANNEL_LAYOUT_BITSTREAM = 32,
+
   // Max value, must always equal the largest entry ever logged.
-  CEF_CHANNEL_LAYOUT_MAX = CEF_CHANNEL_LAYOUT_4_1_QUAD_SIDE
+  CEF_CHANNEL_LAYOUT_MAX = CEF_CHANNEL_LAYOUT_BITSTREAM
 } cef_channel_layout_t;
 
 #ifdef __cplusplus

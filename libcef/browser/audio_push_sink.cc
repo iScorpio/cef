@@ -78,9 +78,12 @@ cef_channel_layout_t TranslateChannelLayout(ChannelLayout channel) {
       return CEF_CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC;
     case CHANNEL_LAYOUT_4_1_QUAD_SIDE:
       return CEF_CHANNEL_LAYOUT_4_1_QUAD_SIDE;
+    case CHANNEL_LAYOUT_BITSTREAM:
+      return CEF_CHANNEL_LAYOUT_BITSTREAM;
     case CHANNEL_LAYOUT_NONE:
       return CEF_CHANNEL_LAYOUT_NONE;
   }
+  return CEF_CHANNEL_LAYOUT_NONE;
 }
 }  // namespace
 
