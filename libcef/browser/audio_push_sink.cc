@@ -125,7 +125,12 @@ void CefAudioPushSink::InitOnUIThread() {
 
 void CefAudioPushSink::OnData(std::unique_ptr<media::AudioBus> source,
                               base::TimeTicks reference_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!CEF_CURRENTLY_ON_UIT()) {
+    CEF_POST_TASK(CEF_UIT, base::BindOnce(&CefAudioPushSink::OnData,
+                                          base::Unretained(this),
+                                          std::move(source), reference_time));
+    return;
+  }
 
   if (stop_stream_)
     return;
@@ -142,7 +147,11 @@ void CefAudioPushSink::OnData(std::unique_ptr<media::AudioBus> source,
 }
 
 void CefAudioPushSink::Close() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!CEF_CURRENTLY_ON_UIT()) {
+    CEF_POST_TASK(CEF_UIT, base::BindOnce(&CefAudioPushSink::Close,
+                                          base::Unretained(this)));
+    return;
+  }
 
   if (!stop_stream_) {
     stop_stream_ = true;

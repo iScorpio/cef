@@ -33,7 +33,7 @@
 // by hand. See the translator.README.txt file in the tools directory for
 // more information.
 //
-// $hash=c0c6f6a07c4f3cd74f8d9417e177573228e5bf97$
+// $hash=798bc67e42435f9387ef77895ca5ea47e94c427e$
 //
 
 #ifndef CEF_INCLUDE_CAPI_CEF_AUDIO_HANDLER_CAPI_H_
@@ -78,12 +78,13 @@ typedef struct _cef_audio_handler_t {
 
   ///
   // Event handler for new audio packet from |audio_stream_id|, |data| is an
-  // array representing raw PCM data. The layout of this array and the type of
-  // the contained raw PCM data depend on the channel layout provided by the
-  // OnAudioStreamStarted handler. |frames| is the number of frames in the PCM
-  // packet. Based on number of frames and the channel layout one can calculate
-  // the size in bytes. |pts| is the presentation timestamp and represents the
-  // time at which the decompressed packet will be presented to the user.
+  // array representing raw PCM data as floating point type, i.e. 4-byte
+  // value(s). The layout of this array depends on the channel layout provided
+  // by the OnAudioStreamStarted handler. |frames| is the number of frames in
+  // the PCM packet. Based on number of frames and the channel layout one can
+  // calculate the size in bytes. |pts| is the presentation timestamp and
+  // represents the time at which the decompressed packet will be presented to
+  // the user.
   ///
   void(CEF_CALLBACK* on_audio_stream_packet)(struct _cef_audio_handler_t* self,
                                              struct _cef_browser_t* browser,

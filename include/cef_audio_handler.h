@@ -71,8 +71,8 @@ class CefAudioHandler : public virtual CefBaseRefCounted {
 
   ///
   // Event handler for new audio packet from |audio_stream_id|,
-  // |data| is an array representing raw PCM data. The layout of this array and
-  // the type of the contained raw PCM data depend on the channel layout
+  // |data| is an array representing raw PCM data as floating point type, i.e.
+  // 4-byte value(s). The layout of this array depends on the channel layout
   // provided by the OnAudioStreamStarted handler. |frames| is the number of
   // frames in the PCM packet. Based on number of frames and the channel layout
   // one can calculate the size in bytes. |pts| is the presentation timestamp
